@@ -1,0 +1,17 @@
+{
+	"name": "Workflows Starter Template",
+	"install": "npm ci",
+	"terminals": [
+		{
+			"name": "dev",
+			"command": "npm run dev",
+			"description": "Vite dev server running the Cloudflare Worker locally (workerd/miniflare) with the React front-end on http://localhost:5173"
+		}
+	],
+	"ports": [
+		{
+			"name": "vite",
+			"port": 5173
+		}
+	]
+}
