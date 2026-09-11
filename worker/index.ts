@@ -5,15 +5,35 @@ export { WorkflowStatusDO } from "./durable-object";
 /**
  * Main Worker fetch handler
  *
- * Handles API routes and WebSocket upgrade requests for workflow management:
- * - POST /api/workflow/start - Create new workflow instance
- * - GET /api/workflow/status/:id - Get workflow status
- * - POST /api/workflow/event/:id - Send events to workflow
- * - GET /ws - WebSocket connection for real-time updates
+ * Handles API routes and WebSocket upgrade requests for:
+ * - Fantasy Football Command Center (Durable Object state, Grok intel, and token optimization)
+ * - Cloudflare Workflows orchestration
  */
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
+
+		// Fantasy Football Command Center API endpoints (routed through Durable Object)
+		if (url.pathname.startsWith("/api/fantasy/")) {
+			const subpath = url.pathname.replace("/api/fantasy", "");
+			const teamId = url.searchParams.get("teamId") || "default_team";
+			const doId = env.WORKFLOW_STATUS.idFromName(teamId);
+			const stub = env.WORKFLOW_STATUS.get(doId);
+
+			const doRequest = new Request(
+				new URL(subpath || "/state", request.url).toString(),
+				{
+					method: request.method,
+					headers: request.headers,
+					body:
+						request.method !== "GET" && request.method !== "HEAD"
+							? request.body
+							: undefined,
+				},
+			);
+
+			return stub.fetch(doRequest);
+		}
 
 		// API: Start a new workflow instance
 		if (url.pathname === "/api/workflow/start" && request.method === "POST") {
@@ -95,14 +115,12 @@ export default {
 			}
 		}
 
-		// WebSocket: Connect to workflow status updates
+		// WebSocket: Connect to workflow or fantasy status updates
 		if (url.pathname === "/ws") {
-			const instanceId = url.searchParams.get("instanceId");
-			if (!instanceId) {
-				return new Response("instanceId query parameter required", {
-					status: 400,
-				});
-			}
+			const instanceId =
+				url.searchParams.get("instanceId") ||
+				url.searchParams.get("teamId") ||
+				"default_team";
 
 			const upgradeHeader = request.headers.get("Upgrade");
 			if (upgradeHeader !== "websocket") {
@@ -120,6 +138,6 @@ export default {
 			}
 		}
 
-		return Response.json({ error: "Not Found" }, { status: 404 });
+		return new Response("Not found", { status: 404 });
 	},
-} satisfies ExportedHandler<Env>;
+};

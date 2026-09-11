@@ -1,0 +1,456 @@
+import type {
+	CommandCenterState,
+	GrokDecisionResponse,
+	IntelCachePacket,
+	LeagueRoster,
+	TokenMetrics,
+} from "./types/fantasy";
+
+export const INITIAL_ROSTER: LeagueRoster = {
+	teamId: "tm_gridiron_pulse",
+	teamName: "Neural Gridiron Pulse",
+	owner: "You (Command Center)",
+	record: "9-4",
+	rank: 2,
+	starters: [
+		{
+			id: "p_jallen",
+			name: "Josh Allen",
+			pos: "QB",
+			team: "BUF",
+			opp: "vs LAR",
+			projPts: 22.8,
+			status: "ACTIVE",
+			tags: ["High Floor", "Red Zone Rushing"],
+		},
+		{
+			id: "p_bijan",
+			name: "Bijan Robinson",
+			pos: "RB",
+			team: "ATL",
+			opp: "@ CAR",
+			projPts: 18.6,
+			status: "ACTIVE",
+			tags: ["Bellcow", "Target Funnel"],
+		},
+		{
+			id: "p_kyren",
+			name: "Kyren Williams",
+			pos: "RB",
+			team: "LAR",
+			opp: "@ BUF",
+			projPts: 15.4,
+			status: "QUESTIONABLE",
+			injuryDesc: "Ankle - Did Not Practice (Thu), Limited (Wed)",
+			weatherCondition: "Wind 18-28mph Gusts, Lake Effect",
+			tags: ["Game-time Decision", "High Risk"],
+		},
+		{
+			id: "p_jchase",
+			name: "Ja'Marr Chase",
+			pos: "WR",
+			team: "CIN",
+			opp: "@ DAL",
+			projPts: 20.2,
+			status: "ACTIVE",
+			tags: ["Elite WR1", "Target Share 32%"],
+		},
+		{
+			id: "p_waddle",
+			name: "Jaylen Waddle",
+			pos: "WR",
+			team: "MIA",
+			opp: "@ NYJ",
+			projPts: 13.8,
+			status: "ACTIVE",
+			tags: ["Shadow Coverage", "Deep Threat"],
+		},
+		{
+			id: "p_kittle",
+			name: "George Kittle",
+			pos: "TE",
+			team: "SF",
+			opp: "vs CHI",
+			projPts: 14.1,
+			status: "ACTIVE",
+			tags: ["Red Zone Focus", "High YAC"],
+		},
+		{
+			id: "p_aubrey",
+			name: "Brandon Aubrey",
+			pos: "K",
+			team: "DAL",
+			opp: "vs CIN",
+			projPts: 9.8,
+			status: "ACTIVE",
+			weatherCondition: "Dome",
+		},
+		{
+			id: "p_baldst",
+			name: "Baltimore Ravens",
+			pos: "DST",
+			team: "BAL",
+			opp: "@ NYG",
+			projPts: 8.5,
+			status: "ACTIVE",
+			tags: ["Top 3 Pressure Rate"],
+		},
+	],
+	bench: [
+		{
+			id: "p_charbonnet",
+			name: "Zach Charbonnet",
+			pos: "RB",
+			team: "SEA",
+			opp: "@ ARI",
+			projPts: 16.2,
+			status: "ACTIVE",
+			tags: ["Handcuff Smash", "Goal-line Work"],
+		},
+		{
+			id: "p_jsn",
+			name: "Jaxon Smith-Njigba",
+			pos: "WR",
+			team: "SEA",
+			opp: "@ ARI",
+			projPts: 15.9,
+			status: "ACTIVE",
+			tags: ["Full Practice Fri", "Slot Funnel"],
+		},
+		{
+			id: "p_allgeier",
+			name: "Tyler Allgeier",
+			pos: "RB",
+			team: "ATL",
+			opp: "@ CAR",
+			projPts: 8.4,
+			status: "ACTIVE",
+		},
+		{
+			id: "p_ferguson",
+			name: "Jake Ferguson",
+			pos: "TE",
+			team: "DAL",
+			opp: "vs CIN",
+			projPts: 10.2,
+			status: "ACTIVE",
+		},
+	],
+};
+
+export const INITIAL_INTEL: IntelCachePacket = {
+	week: 14,
+	asOf: "Sun 10:15 AM ET",
+	fresh: true,
+	hash: "intel_wk14_b82a17",
+	injuries: [
+		{
+			playerId: "p_kyren",
+			playerName: "Kyren Williams",
+			team: "LAR",
+			status: "Q",
+			practiceReport: {
+				wed: "LP",
+				thu: "DNP",
+				fri: "LP",
+			},
+			handcuffId: "p_charbonnet",
+			handcuffName: "Zach Charbonnet",
+			confidence: 0.72,
+		},
+		{
+			playerId: "p_jsn",
+			playerName: "Jaxon Smith-Njigba",
+			team: "SEA",
+			status: "FULL",
+			practiceReport: {
+				wed: "LP",
+				thu: "FP",
+				fri: "FP",
+			},
+			confidence: 0.88,
+		},
+	],
+	weather: [
+		{
+			game: "LAR @ BUF",
+			location: "Highmark Stadium (Orchard Park, NY)",
+			isDome: false,
+			windMph: 18,
+			gustMph: 28,
+			tempF: 27,
+			precipPct: 45,
+			weatherTag: "PASS-FADE",
+		},
+		{
+			game: "SEA @ ARI",
+			location: "State Farm Stadium (Glendale, AZ)",
+			isDome: true,
+			windMph: 0,
+			gustMph: 0,
+			tempF: 72,
+			precipPct: 0,
+			weatherTag: "NONE",
+		},
+		{
+			game: "MIA @ NYJ",
+			location: "MetLife Stadium (East Rutherford, NJ)",
+			isDome: false,
+			windMph: 14,
+			gustMph: 20,
+			tempF: 34,
+			precipPct: 20,
+			weatherTag: "K-FADE",
+		},
+	],
+	beatReports: [
+		{
+			id: "beat_1",
+			handle: "@RapSheet",
+			authorName: "Ian Rapoport",
+			timestamp: "28m ago",
+			claim: "Rams RB Kyren Williams (ankle) will test pregame. Team preparing for limited touches; heavy snap share risk in freezing Orchard Park.",
+			playerId: "p_kyren",
+			team: "LAR",
+			confidence: 0.82,
+			impactLevel: "HIGH",
+		},
+		{
+			id: "beat_2",
+			handle: "@bcondotta",
+			authorName: "Bob Condotta",
+			timestamp: "1h ago",
+			claim: "Seahawks OC confirmed Jaxon Smith-Njigba is 100% full go after hamstring scare. Target share expected to stay north of 28% in dome vs Cardinals secondary.",
+			playerId: "p_jsn",
+			team: "SEA",
+			confidence: 0.9,
+			impactLevel: "HIGH",
+		},
+		{
+			id: "beat_3",
+			handle: "@JFowlerNFL",
+			authorName: "Jeremy Fowler",
+			timestamp: "45m ago",
+			claim: "Seahawks plan to ride Zach Charbonnet heavily near goal line; Cardinals run defense ranks 29th in yards after contact allowed.",
+			playerId: "p_charbonnet",
+			team: "SEA",
+			confidence: 0.85,
+			impactLevel: "HIGH",
+		},
+		{
+			id: "beat_4",
+			handle: "@AdamSchefter",
+			authorName: "Adam Schefter",
+			timestamp: "2h ago",
+			claim: "Jets top cornerback Sauce Gardner expected to shadow Jaylen Waddle on perimeter with Tyreek Hill commanding safety help over top.",
+			playerId: "p_waddle",
+			team: "MIA",
+			confidence: 0.79,
+			impactLevel: "MEDIUM",
+		},
+	],
+};
+
+export const INITIAL_TOKEN_METRICS: TokenMetrics[] = [
+	{
+		queryType: "Start/Sit Matchup Query",
+		legacyTokens: 4200,
+		optimizedTokens: 380,
+		savingsPercent: 90.9,
+		latencyReductionMs: 1450,
+	},
+	{
+		queryType: "Waiver Wire & FAAB Scan",
+		legacyTokens: 6800,
+		optimizedTokens: 750,
+		savingsPercent: 88.9,
+		latencyReductionMs: 2100,
+	},
+	{
+		queryType: "Trade Impact Valuation",
+		legacyTokens: 5400,
+		optimizedTokens: 640,
+		savingsPercent: 88.1,
+		latencyReductionMs: 1800,
+	},
+	{
+		queryType: "In-Game Injury Pivot Check",
+		legacyTokens: 3100,
+		optimizedTokens: 290,
+		savingsPercent: 90.6,
+		latencyReductionMs: 950,
+	},
+];
+
+export function buildCommandCenterState(): CommandCenterState {
+	return {
+		selectedWeek: 14,
+		activeRoster: INITIAL_ROSTER,
+		intelPacket: INITIAL_INTEL,
+		recommendations: [
+			{
+				id: "Kyren",
+				act: "SIT",
+				vs: "Charbonnet",
+				delta: -4.2,
+				conf: 0.74,
+				why: "Ankle DNP, game-time risk in 28mph freezing wind.",
+				src: "@RapSheet",
+				flags: ["INJ", "WX"],
+			},
+			{
+				id: "Charbonnet",
+				act: "START",
+				vs: "Kyren",
+				delta: 4.2,
+				conf: 0.85,
+				why: "Domed environment, goal-line volume vs 29th-ranked rush defense.",
+				src: "@JFowlerNFL",
+				flags: ["INJ"],
+			},
+			{
+				id: "Waddle",
+				act: "SIT",
+				vs: "JSN",
+				delta: -2.1,
+				conf: 0.68,
+				why: "Shadow coverage matchup; JSN has 28% slot funnel.",
+				src: "@AdamSchefter",
+				flags: ["SPLIT"],
+			},
+			{
+				id: "JSN",
+				act: "START",
+				vs: "Waddle",
+				delta: 2.1,
+				conf: 0.88,
+				why: "Cleared full practice; high ceiling inside State Farm dome.",
+				src: "@bcondotta",
+				flags: ["NEWS"],
+			},
+		],
+		tokenMetrics: INITIAL_TOKEN_METRICS,
+		liveAlerts: [
+			{
+				id: "alt_1",
+				time: "10:14 AM",
+				type: "INJURY",
+				message: "Grok Alert: Kyren Williams hobbled in early warmups in Orchard Park. Recommend immediate bench swap.",
+				severity: "danger",
+			},
+			{
+				id: "alt_2",
+				time: "09:45 AM",
+				type: "WEATHER",
+				message: "Highmark Stadium wind sustained at 18mph with 28mph gusts. Kicking and deep passing downgraded.",
+				severity: "warning",
+			},
+			{
+				id: "alt_3",
+				time: "08:30 AM",
+				type: "GROK",
+				message: "20-Handle Beat Intelligence Synced: All 12 rostered player injury updates verified fresh.",
+				severity: "success",
+			},
+		],
+	};
+}
+
+export function executeGrokDecision(
+	playerAId: string,
+	playerBId: string,
+	useLegacy: boolean,
+): GrokDecisionResponse {
+	const isKyrenVsCharbonnet =
+		(playerAId.includes("kyren") && playerBId.includes("charbonnet")) ||
+		(playerAId.includes("charbonnet") && playerBId.includes("kyren"));
+
+	const isWaddleVsJsn =
+		(playerAId.includes("waddle") && playerBId.includes("jsn")) ||
+		(playerAId.includes("jsn") && playerBId.includes("waddle"));
+
+	let recs = [];
+	if (isKyrenVsCharbonnet) {
+		recs = [
+			{
+				id: "Kyren",
+				act: "SIT" as const,
+				vs: "Charbonnet",
+				delta: -4.2,
+				conf: 0.78,
+				why: "Ankle DNP + game-time tag in 28mph freezing wind.",
+				src: "@RapSheet",
+				flags: ["INJ" as const, "WX" as const],
+			},
+			{
+				id: "Charbonnet",
+				act: "START" as const,
+				vs: "Kyren",
+				delta: 4.2,
+				conf: 0.85,
+				why: "Dome smash spot vs bottom-3 run defense.",
+				src: "@JFowlerNFL",
+				flags: ["INJ" as const],
+			},
+		];
+	} else if (isWaddleVsJsn) {
+		recs = [
+			{
+				id: "Waddle",
+				act: "SIT" as const,
+				vs: "JSN",
+				delta: -2.1,
+				conf: 0.68,
+				why: "Sauce shadow coverage with MetLife crosswinds.",
+				src: "@AdamSchefter",
+				flags: ["SPLIT" as const],
+			},
+			{
+				id: "JSN",
+				act: "START" as const,
+				vs: "Waddle",
+				delta: 2.1,
+				conf: 0.88,
+				why: "Full practice; slot target funnel in climate-controlled dome.",
+				src: "@bcondotta",
+				flags: ["NEWS" as const],
+			},
+		];
+	} else {
+		recs = [
+			{
+				id: playerAId,
+				act: "START" as const,
+				vs: playerBId,
+				delta: 1.8,
+				conf: 0.71,
+				why: "Favorable projected volume and goal line equity.",
+				src: "card",
+				flags: ["NEWS" as const],
+			},
+			{
+				id: playerBId,
+				act: "SIT" as const,
+				vs: playerAId,
+				delta: -1.8,
+				conf: 0.71,
+				why: "Lower snap share projection in current game script.",
+				src: "card",
+				flags: [],
+			},
+		];
+	}
+
+	const optimizedTokens = 380;
+	const legacyTokens = 4250;
+
+	return {
+		task: "WK14_DECISION",
+		wk: 14,
+		recs,
+		tokensUsed: useLegacy ? legacyTokens : optimizedTokens,
+		legacyTokensEquivalent: legacyTokens,
+		cacheHit: true,
+		timestamp: Date.now(),
+	};
+}
