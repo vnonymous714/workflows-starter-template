@@ -49,5 +49,11 @@
 			"new_sqlite_classes": ["WorkflowStatusDO"]
 		}
 	],
-	"upload_source_maps": true
+	"upload_source_maps": true,
+	/**
+	 * Secrets (never commit values):
+	 * - XAI_API_KEY: xAI Grok key for live start/sit Evaluate
+	 *   Local: copy `.dev.vars.example` to `.dev.vars`
+	 *   Deployed: `npx wrangler secret put XAI_API_KEY`
+	 */
 }

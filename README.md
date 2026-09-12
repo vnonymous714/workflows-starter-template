@@ -65,6 +65,26 @@ FRESH:1
 
 ---
 
+## Live Grok start/sit
+
+Evaluate (default **Kyren vs Charbonnet**) sends a compact CSSP packet from Durable Object state to xAI and persists the JSON verdict plus **actual** `usage` token counts. Missing `XAI_API_KEY` returns an error; it does not use canned Grok copy.
+
+### Set `XAI_API_KEY`
+
+Local:
+
+```bash
+cp .dev.vars.example .dev.vars
+# edit .dev.vars and set XAI_API_KEY
+npm run dev
+```
+
+Deployed Worker:
+
+```bash
+npx wrangler secret put XAI_API_KEY
+```
+
 ## Getting Started
 
 ### Installation
@@ -79,7 +99,7 @@ npm install
 npm run dev
 ```
 
-Visit `http://localhost:5173` to access the interactive Command Center.
+Visit `http://localhost:5173` to access the interactive Command Center. Requires `XAI_API_KEY` in `.dev.vars` for live Evaluate.
 
 ### Testing
 

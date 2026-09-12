@@ -49,6 +49,20 @@ export interface GrokDecisionResponse {
 	legacyTokensEquivalent: number;
 	cacheHit: boolean;
 	timestamp: number;
+	model?: string;
+}
+
+export interface GrokApiErrorBody {
+	error: string;
+	code: "XAI_API_KEY_MISSING" | "XAI_REQUEST_FAILED" | "XAI_INVALID_RESPONSE";
+}
+
+export interface GrokStartSitVerdict {
+	act: GrokDecisionAction;
+	delta: number;
+	conf: number;
+	why: string;
+	flags: IntelFlag[];
 }
 
 export interface BeatReporterIntel {
@@ -123,6 +137,7 @@ export interface CommandCenterState {
 	intelPacket: IntelCachePacket;
 	recommendations: GrokRecommendation[];
 	tokenMetrics: TokenMetrics[];
+	lastDecision: GrokDecisionResponse | null;
 	liveAlerts: {
 		id: string;
 		time: string;

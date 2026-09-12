@@ -1,6 +1,5 @@
 import type {
 	CommandCenterState,
-	GrokDecisionResponse,
 	IntelCachePacket,
 	LeagueRoster,
 	TokenMetrics,
@@ -330,6 +329,7 @@ export function buildCommandCenterState(): CommandCenterState {
 			},
 		],
 		tokenMetrics: INITIAL_TOKEN_METRICS,
+		lastDecision: null,
 		liveAlerts: [
 			{
 				id: "alt_1",
@@ -356,101 +356,8 @@ export function buildCommandCenterState(): CommandCenterState {
 	};
 }
 
-export function executeGrokDecision(
-	playerAId: string,
-	playerBId: string,
-	useLegacy: boolean,
-): GrokDecisionResponse {
-	const isKyrenVsCharbonnet =
-		(playerAId.includes("kyren") && playerBId.includes("charbonnet")) ||
-		(playerAId.includes("charbonnet") && playerBId.includes("kyren"));
-
-	const isWaddleVsJsn =
-		(playerAId.includes("waddle") && playerBId.includes("jsn")) ||
-		(playerAId.includes("jsn") && playerBId.includes("waddle"));
-
-	let recs = [];
-	if (isKyrenVsCharbonnet) {
-		recs = [
-			{
-				id: "Kyren",
-				act: "SIT" as const,
-				vs: "Charbonnet",
-				delta: -4.2,
-				conf: 0.78,
-				why: "Ankle DNP + game-time tag in 28mph freezing wind.",
-				src: "@RapSheet",
-				flags: ["INJ" as const, "WX" as const],
-			},
-			{
-				id: "Charbonnet",
-				act: "START" as const,
-				vs: "Kyren",
-				delta: 4.2,
-				conf: 0.85,
-				why: "Dome smash spot vs bottom-3 run defense.",
-				src: "@JFowlerNFL",
-				flags: ["INJ" as const],
-			},
-		];
-	} else if (isWaddleVsJsn) {
-		recs = [
-			{
-				id: "Waddle",
-				act: "SIT" as const,
-				vs: "JSN",
-				delta: -2.1,
-				conf: 0.68,
-				why: "Sauce shadow coverage with MetLife crosswinds.",
-				src: "@AdamSchefter",
-				flags: ["SPLIT" as const],
-			},
-			{
-				id: "JSN",
-				act: "START" as const,
-				vs: "Waddle",
-				delta: 2.1,
-				conf: 0.88,
-				why: "Full practice; slot target funnel in climate-controlled dome.",
-				src: "@bcondotta",
-				flags: ["NEWS" as const],
-			},
-		];
-	} else {
-		recs = [
-			{
-				id: playerAId,
-				act: "START" as const,
-				vs: playerBId,
-				delta: 1.8,
-				conf: 0.71,
-				why: "Favorable projected volume and goal line equity.",
-				src: "card",
-				flags: ["NEWS" as const],
-			},
-			{
-				id: playerBId,
-				act: "SIT" as const,
-				vs: playerAId,
-				delta: -1.8,
-				conf: 0.71,
-				why: "Lower snap share projection in current game script.",
-				src: "card",
-				flags: [],
-			},
-		];
-	}
-
-	const optimizedTokens = 380;
-	const legacyTokens = 4250;
-
-	return {
-		task: "WK14_DECISION",
-		wk: 14,
-		recs,
-		tokensUsed: useLegacy ? legacyTokens : optimizedTokens,
-		legacyTokensEquivalent: legacyTokens,
-		cacheHit: true,
-		timestamp: Date.now(),
-	};
-}
+export {
+	DEFAULT_START_SIT_QUERY,
+	executeGrokDecision,
+	LEGACY_TOKENS_EQUIVALENT,
+} from "./grok-client";

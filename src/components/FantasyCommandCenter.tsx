@@ -13,6 +13,7 @@ import {
 	INITIAL_INTEL,
 	INITIAL_TOKEN_METRICS,
 } from "../fantasy-intel";
+import { recommendationMatchesPlayer } from "../grok-client";
 
 export function FantasyCommandCenter() {
 	const [activeTab, setActiveTab] = useState<
@@ -25,6 +26,8 @@ export function FantasyCommandCenter() {
 	const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 	const [latestDecision, setLatestDecision] =
 		useState<GrokDecisionResponse | null>(null);
+	const [evaluateError, setEvaluateError] = useState<string | null>(null);
+	const [wsConnected, setWsConnected] = useState<boolean>(false);
 	const [useLegacySimulation, setUseLegacySimulation] =
 		useState<boolean>(false);
 
@@ -75,6 +78,7 @@ export function FantasyCommandCenter() {
 			},
 		],
 		tokenMetrics: INITIAL_TOKEN_METRICS,
+		lastDecision: null,
 		liveAlerts: [
 			{
 				id: "alt_1",
@@ -108,16 +112,52 @@ export function FantasyCommandCenter() {
 		fetch("/api/fantasy/state")
 			.then((res) => (res.ok ? res.json() : null))
 			.then((data: CommandCenterState | null) => {
-				if (data) setState(data);
+				if (data) {
+					setState(data);
+					if (data.lastDecision) setLatestDecision(data.lastDecision);
+				}
 			})
 			.catch(() => {
 				// Keep fallback initial state if API is offline
 			});
 	}, []);
 
+	// Subscribe to Durable Object fantasy_update so evaluate/swap stays live
+	useEffect(() => {
+		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+		const ws = new WebSocket(
+			`${protocol}//${window.location.host}/ws?teamId=default_team`,
+		);
+
+		ws.onopen = () => setWsConnected(true);
+		ws.onclose = () => setWsConnected(false);
+		ws.onerror = () => setWsConnected(false);
+		ws.onmessage = (event) => {
+			try {
+				const data = JSON.parse(event.data) as {
+					type?: string;
+					payload?: CommandCenterState;
+				};
+				if (data.type === "fantasy_update" && data.payload) {
+					setState(data.payload);
+					if (data.payload.lastDecision) {
+						setLatestDecision(data.payload.lastDecision);
+					}
+				}
+			} catch {
+				// Ignore malformed frames
+			}
+		};
+
+		return () => {
+			ws.close();
+		};
+	}, []);
+
 	// Run Grok Evaluation
 	const handleRunGrokDecision = async () => {
 		setIsEvaluating(true);
+		setEvaluateError(null);
 		try {
 			const res = await fetch("/api/fantasy/decide", {
 				method: "POST",
@@ -129,27 +169,36 @@ export function FantasyCommandCenter() {
 				}),
 			});
 
-			if (res.ok) {
-				const decision: GrokDecisionResponse = await res.json();
-				setLatestDecision(decision);
-				// Update recommendations in state
-				setState((prev: CommandCenterState) => {
-					const existingIds = new Set(
-						decision.recs.map((r: GrokRecommendation) => r.id),
-					);
-					return {
-						...prev,
-						recommendations: [
-							...decision.recs,
-							...prev.recommendations.filter(
-								(r: GrokRecommendation) => !existingIds.has(r.id),
-							),
-						],
-					};
-				});
+			const body: unknown = await res.json().catch(() => null);
+			if (!res.ok) {
+				const err = body as { error?: string } | null;
+				setEvaluateError(
+					err?.error ?? `Evaluate failed (${res.status}).`,
+				);
+				return;
 			}
+
+			const decision = body as GrokDecisionResponse;
+			setLatestDecision(decision);
+			setState((prev: CommandCenterState) => {
+				const existingIds = new Set(
+					decision.recs.map((r: GrokRecommendation) => r.id),
+				);
+				return {
+					...prev,
+					lastDecision: decision,
+					recommendations: [
+						...decision.recs,
+						...prev.recommendations.filter(
+							(r: GrokRecommendation) => !existingIds.has(r.id),
+						),
+					],
+				};
+			});
 		} catch (e) {
-			console.error("Decision evaluation failed", e);
+			setEvaluateError(
+				e instanceof Error ? e.message : "Decision evaluation failed",
+			);
 		} finally {
 			setIsEvaluating(false);
 		}
@@ -327,9 +376,17 @@ export function FantasyCommandCenter() {
 				</div>
 
 				<div className="flex items-center gap-2">
-					<span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+					<span
+						className={`w-2 h-2 rounded-full ${
+							wsConnected
+								? "bg-emerald-500 animate-pulse"
+								: "bg-neutral-400"
+						}`}
+					/>
 					<span className="text-[11px] text-neutral-500 dark:text-neutral-400">
-						Durable Object Connected
+						{wsConnected
+							? "Durable Object live"
+							: "Connecting to Durable Object…"}
 					</span>
 				</div>
 			</div>
@@ -360,8 +417,7 @@ export function FantasyCommandCenter() {
 									const isSelected = selectedStarter === player.id;
 									const rec = state.recommendations.find(
 										(r: GrokRecommendation) =>
-											r.id.toLowerCase() ===
-											player.name.split(" ")[0].toLowerCase(),
+											recommendationMatchesPlayer(r, player),
 									);
 
 									return (
@@ -438,8 +494,7 @@ export function FantasyCommandCenter() {
 										const isSelected = selectedBench === player.id;
 										const rec = state.recommendations.find(
 											(r: GrokRecommendation) =>
-												r.id.toLowerCase() ===
-												player.name.split(" ")[0].toLowerCase(),
+												recommendationMatchesPlayer(r, player),
 										);
 
 										return (
@@ -556,8 +611,8 @@ export function FantasyCommandCenter() {
 										}`}
 									>
 										{useLegacySimulation
-											? "ON (4,250 tokens)"
-											: "OFF (380 tokens)"}
+											? "ON (verbose dump)"
+											: "OFF (compact CSSP)"}
 									</button>
 								</div>
 
@@ -582,6 +637,12 @@ export function FantasyCommandCenter() {
 									</button>
 								</div>
 
+								{evaluateError && (
+									<p className="mt-2 text-[11px] text-rose-600 dark:text-rose-400">
+										{evaluateError}
+									</p>
+								)}
+
 								{/* Latest Decision Card */}
 								{latestDecision && (
 									<div className="mt-4 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30">
@@ -590,8 +651,10 @@ export function FantasyCommandCenter() {
 												Grok Verdict ({latestDecision.task})
 											</span>
 											<span className="font-mono text-[10px] text-neutral-600 dark:text-neutral-400">
-												{latestDecision.tokensUsed} tokens used (vs{" "}
-												{latestDecision.legacyTokensEquivalent} legacy)
+												{latestDecision.tokensUsed} tokens
+												{latestDecision.model
+													? ` · ${latestDecision.model}`
+													: ""}
 											</span>
 										</div>
 
@@ -638,6 +701,12 @@ export function FantasyCommandCenter() {
 												</div>
 											))}
 										</div>
+										<p className="mt-2 text-[10px] font-mono text-neutral-500 dark:text-neutral-400">
+											xAI usage: {latestDecision.tokensUsed} tokens
+											{latestDecision.cacheHit ? " · cache" : ""}
+											{" · vs "}
+											{latestDecision.legacyTokensEquivalent} legacy
+										</p>
 									</div>
 								)}
 							</div>

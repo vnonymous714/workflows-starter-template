@@ -1,9 +1,15 @@
 import { DurableObject } from "cloudflare:workers";
 import type {
 	CommandCenterState,
+	GrokApiErrorBody,
 	GrokDecisionResponse,
 } from "../src/types/fantasy";
-import { buildCommandCenterState, executeGrokDecision } from "../src/fantasy-intel";
+import { buildCommandCenterState } from "../src/fantasy-intel";
+import {
+	executeGrokDecision,
+	GrokRequestError,
+	MissingXaiApiKeyError,
+} from "../src/grok-client";
 
 /**
  * WorkflowStatusDO - Durable Object for managing workflow and fantasy command center state.
@@ -86,12 +92,16 @@ export class WorkflowStatusDO extends DurableObject {
 				playerB: string;
 				useLegacy?: boolean;
 			};
-			const decision = await this.decide(
-				body.playerA,
-				body.playerB,
-				!!body.useLegacy,
-			);
-			return Response.json(decision);
+			try {
+				const decision = await this.decide(
+					body.playerA,
+					body.playerB,
+					!!body.useLegacy,
+				);
+				return Response.json(decision);
+			} catch (error) {
+				return this.grokErrorResponse(error);
+			}
 		}
 
 		if (url.pathname === "/intel/refresh" && request.method === "POST") {
@@ -150,23 +160,54 @@ export class WorkflowStatusDO extends DurableObject {
 		playerAId: string,
 		playerBId: string,
 		useLegacy = false,
+		grok?: { apiKey?: string; fetchImpl?: typeof fetch },
 	): Promise<GrokDecisionResponse> {
-		const decision = executeGrokDecision(playerAId, playerBId, useLegacy);
+		const decision = await executeGrokDecision(
+			this.fantasyState,
+			playerAId,
+			playerBId,
+			{
+				apiKey: grok?.apiKey ?? this.env.XAI_API_KEY,
+				useLegacy,
+				fetchImpl: grok?.fetchImpl,
+			},
+		);
 
-		// Merge recommendation into current state
 		const existingIds = new Set(decision.recs.map((r) => r.id));
-		const updatedRecs = [
+		this.fantasyState.recommendations = [
 			...decision.recs,
 			...this.fantasyState.recommendations.filter(
 				(r) => !existingIds.has(r.id),
 			),
 		];
-		this.fantasyState.recommendations = updatedRecs;
+		this.fantasyState.lastDecision = decision;
 
 		await this.ctx.storage.put("fantasyState", this.fantasyState);
 		this.broadcast(this.getFantasyStateMessage());
 
 		return decision;
+	}
+
+	private grokErrorResponse(error: unknown): Response {
+		if (error instanceof MissingXaiApiKeyError) {
+			const body: GrokApiErrorBody = {
+				error: error.message,
+				code: error.code,
+			};
+			return Response.json(body, { status: 503 });
+		}
+		if (error instanceof GrokRequestError) {
+			const body: GrokApiErrorBody = {
+				error: error.message,
+				code: error.code,
+			};
+			return Response.json(body, { status: 502 });
+		}
+		const body: GrokApiErrorBody = {
+			error: error instanceof Error ? error.message : "Grok evaluation failed.",
+			code: "XAI_REQUEST_FAILED",
+		};
+		return Response.json(body, { status: 500 });
 	}
 
 	async refreshIntel(): Promise<CommandCenterState> {
