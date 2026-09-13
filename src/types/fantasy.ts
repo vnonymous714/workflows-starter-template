@@ -141,8 +141,33 @@ export interface CommandCenterState {
 	liveAlerts: {
 		id: string;
 		time: string;
-		type: "INJURY" | "WEATHER" | "LINEUP" | "GROK";
+		type: "INJURY" | "WEATHER" | "LINEUP" | "GROK" | "ESPN";
 		message: string;
 		severity: "warning" | "danger" | "info" | "success";
 	}[];
+	espnSyncMeta?: {
+		syncedAt: number;
+		leagueId: string;
+		season: number;
+		rawBytes: number;
+		sanitizedTokens: number;
+		savingsPercent: number;
+	};
+}
+
+export interface EspnSyncCredentials {
+	espnS2?: string;
+	swid?: string;
+	leagueId?: string;
+	season?: number;
+	teamId?: number | string;
+}
+
+export interface EspnApiErrorBody {
+	error: string;
+	code:
+		| "ESPN_CREDENTIALS_MISSING"
+		| "ESPN_REQUEST_FAILED"
+		| "ESPN_INVALID_RESPONSE"
+		| "ESPN_AUTH_UNAUTHORIZED";
 }

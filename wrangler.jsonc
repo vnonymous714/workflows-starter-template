@@ -55,5 +55,8 @@
 	 * - XAI_API_KEY: xAI Grok key for live start/sit Evaluate
 	 *   Local: copy `.dev.vars.example` to `.dev.vars`
 	 *   Deployed: `npx wrangler secret put XAI_API_KEY`
+	 * - ESPN_S2, SWID, ESPN_LEAGUE_ID, ESPN_SEASON: ESPN Fantasy League cookie authentication
+	 *   Local: copy `.dev.vars.example` to `.dev.vars`
+	 *   Deployed: `npx wrangler secret put ESPN_S2` and `npx wrangler secret put SWID`
 	 */
 }

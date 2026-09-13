@@ -13,6 +13,14 @@ import {
 	resolvePlayer,
 	XAI_CHAT_COMPLETIONS_URL,
 } from "../src/grok-client";
+import {
+	buildEspnApiUrl,
+	buildEspnCookieHeader,
+	fetchEspnLeagueData,
+	MissingEspnCredentialsError,
+	sanitizeEspnTeamRoster,
+	type EspnRawLeagueResponse,
+} from "../src/espn-client";
 import type { WorkflowStatusDO } from "../worker/durable-object";
 
 const MOCK_USAGE = {
@@ -271,5 +279,233 @@ describe("xAI request shape", () => {
 		);
 		expect(capturedBody.messages?.[1]?.content).toContain("Q: Williams vs Charbonnet");
 		expect(capturedBody.messages?.[1]?.content).not.toContain("Ja'Marr Chase");
+	});
+});
+
+const MOCK_ESPN_RAW_LEAGUE: EspnRawLeagueResponse = {
+	id: 12345678,
+	seasonId: 2024,
+	scoringPeriodId: 14,
+	status: {
+		latestScoringPeriod: 14,
+	},
+	members: [
+		{
+			id: "{A8726312-3214-5432-B812-9876543210AB}",
+			displayName: "Commissioner Dave",
+		},
+	],
+	teams: [
+		{
+			id: 1,
+			location: "Gridiron",
+			nickname: "Dynasty",
+			primaryOwner: "{A8726312-3214-5432-B812-9876543210AB}",
+			record: {
+				overall: {
+					wins: 10,
+					losses: 3,
+					ties: 0,
+				},
+			},
+			playoffSeed: 1,
+			roster: {
+				entries: [
+					{
+						lineupSlotId: 0, // QB Starter
+						playerPoolEntry: {
+							appliedStatTotal: 24.5,
+							player: {
+								id: 3918298,
+								fullName: "Josh Allen",
+								defaultPositionId: 1,
+								proTeamId: 2, // BUF
+								injuryStatus: "ACTIVE",
+							},
+						},
+					},
+					{
+						lineupSlotId: 2, // RB Starter
+						playerPoolEntry: {
+							appliedStatTotal: 17.8,
+							player: {
+								id: 4426515,
+								fullName: "Kyren Williams",
+								defaultPositionId: 2,
+								proTeamId: 14, // LAR
+								injuryStatus: "QUESTIONABLE",
+							},
+						},
+					},
+					{
+						lineupSlotId: 20, // Bench
+						playerPoolEntry: {
+							appliedStatTotal: 14.2,
+							player: {
+								id: 4567890,
+								fullName: "Zach Charbonnet",
+								defaultPositionId: 2,
+								proTeamId: 26, // SEA
+								injuryStatus: "ACTIVE",
+							},
+						},
+					},
+				],
+			},
+		},
+	],
+};
+
+describe("ESPN Fantasy Ingestion Client & Sanitizer", () => {
+	it("correctly formats URL and Cookie headers", () => {
+		const url = buildEspnApiUrl(2024, "87654321");
+		expect(url).toBe(
+			"https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/2024/segments/0/leagues/87654321?view=mRoster&view=mTeam",
+		);
+
+		const cookies = buildEspnCookieHeader("sample_s2_token", "{SAMPLE_SWID}");
+		expect(cookies).toBe("espn_s2=sample_s2_token; SWID={SAMPLE_SWID}");
+
+		const emptyCookies = buildEspnCookieHeader("", "");
+		expect(emptyCookies).toBe("");
+	});
+
+	it("throws MissingEspnCredentialsError when leagueId is missing", async () => {
+		await expect(
+			fetchEspnLeagueData({
+				leagueId: "",
+			}),
+		).rejects.toBeInstanceOf(MissingEspnCredentialsError);
+	});
+
+	it("fetches and parses raw ESPN league response with Cookie headers", async () => {
+		let capturedHeaders: Record<string, string> = {};
+		let capturedUrl = "";
+
+		const mockFetch: typeof fetch = async (input, init) => {
+			capturedUrl = String(input);
+			const headers = new Headers(init?.headers);
+			capturedHeaders = Object.fromEntries(headers.entries());
+			return new Response(JSON.stringify(MOCK_ESPN_RAW_LEAGUE), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		};
+
+		const { rawJson, rawBytes } = await fetchEspnLeagueData({
+			leagueId: "12345678",
+			season: 2024,
+			espnS2: "secret_s2_val",
+			swid: "{SWID_VAL}",
+			fetchImpl: mockFetch,
+		});
+
+		expect(capturedUrl).toContain("12345678");
+		expect(capturedHeaders.cookie).toBe("espn_s2=secret_s2_val; SWID={SWID_VAL}");
+		expect(rawJson.id).toBe(12345678);
+		expect(rawBytes).toBeGreaterThan(100);
+	});
+
+	it("throws EspnRequestError with ESPN_AUTH_UNAUTHORIZED on 401/403", async () => {
+		const mockFetch: typeof fetch = async () => {
+			return new Response("Unauthorized", { status: 401 });
+		};
+
+		await expect(
+			fetchEspnLeagueData({
+				leagueId: "12345678",
+				fetchImpl: mockFetch,
+			}),
+		).rejects.toMatchObject({
+			code: "ESPN_AUTH_UNAUTHORIZED",
+		});
+	});
+
+	it("sanitizes raw ESPN JSON into compact CSSP LeagueRoster and computes token savings", () => {
+		const { roster, week, sanitizedTokensEstimate } = sanitizeEspnTeamRoster(
+			MOCK_ESPN_RAW_LEAGUE,
+			1,
+		);
+
+		expect(week).toBe(14);
+		expect(roster.teamName).toBe("Gridiron Dynasty");
+		expect(roster.owner).toBe("Commissioner Dave");
+		expect(roster.record).toBe("10-3");
+		expect(roster.starters).toHaveLength(2);
+		expect(roster.bench).toHaveLength(1);
+
+		// Check starter mapping
+		const qb = roster.starters.find((p) => p.name === "Josh Allen");
+		expect(qb).toBeDefined();
+		expect(qb?.pos).toBe("QB");
+		expect(qb?.team).toBe("BUF");
+		expect(qb?.projPts).toBe(24.5);
+
+		const rb = roster.starters.find((p) => p.name === "Kyren Williams");
+		expect(rb?.status).toBe("QUESTIONABLE");
+		expect(rb?.injuryDesc).toContain("QUESTIONABLE");
+
+		// Check bench mapping
+		const benchRb = roster.bench.find((p) => p.name === "Zach Charbonnet");
+		expect(benchRb).toBeDefined();
+		expect(benchRb?.pos).toBe("RB");
+
+		// Token compression verification
+		expect(sanitizedTokensEstimate).toBeLessThan(150);
+	});
+});
+
+describe("WorkflowStatusDO ESPN sync API path", () => {
+	it("returns 400 when leagueId is missing in request and env", async () => {
+		const doId = env.WORKFLOW_STATUS.idFromName("test_espn_missing_id");
+		const stub = env.WORKFLOW_STATUS.get(doId);
+
+		const res = await stub.fetch("https://do/espn/sync", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({}),
+		});
+
+		expect(res.status).toBe(400);
+		const body = (await res.json()) as { code: string; error: string };
+		expect(body.code).toBe("ESPN_CREDENTIALS_MISSING");
+	});
+
+	it("syncs ESPN roster into Durable Object state, updates token metrics and broadcasts", async () => {
+		const doId = env.WORKFLOW_STATUS.idFromName("test_espn_live_sync");
+		const stub = env.WORKFLOW_STATUS.get(doId);
+
+		const mockFetch: typeof fetch = async () => {
+			return new Response(JSON.stringify(MOCK_ESPN_RAW_LEAGUE), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		};
+
+		const updatedState = await runInDurableObject(
+			stub,
+			async (instance: WorkflowStatusDO) => {
+				return instance.syncEspnRoster(
+					{
+						leagueId: "12345678",
+						season: 2024,
+						espnS2: "test_s2",
+						swid: "{TEST_SWID}",
+					},
+					mockFetch,
+				);
+			},
+		);
+
+		expect(updatedState.activeRoster.teamName).toBe("Gridiron Dynasty");
+		expect(updatedState.activeRoster.starters).toHaveLength(2);
+		expect(updatedState.espnSyncMeta?.leagueId).toBe("12345678");
+		expect(updatedState.espnSyncMeta?.savingsPercent).toBeGreaterThan(0);
+		expect(updatedState.liveAlerts[0].type).toBe("ESPN");
+
+		// Confirm persisted in DO storage
+		const persisted = await stub.getFantasyState();
+		expect(persisted.activeRoster.teamName).toBe("Gridiron Dynasty");
+		expect(persisted.espnSyncMeta?.leagueId).toBe("12345678");
 	});
 });

@@ -2,3 +2,12 @@
 # Copy this file to `.dev.vars` (gitignored) before `npm run dev`.
 # Production / preview: npx wrangler secret put XAI_API_KEY
 XAI_API_KEY=
+
+# ESPN Fantasy Football Cookie Authentication
+# Retrieve espn_s2 and SWID from browser Developer Tools -> Application -> Cookies -> espn.com
+# Production / preview: npx wrangler secret put ESPN_S2 && npx wrangler secret put SWID
+ESPN_S2=
+SWID=
+ESPN_LEAGUE_ID=
+ESPN_SEASON=2024
+
