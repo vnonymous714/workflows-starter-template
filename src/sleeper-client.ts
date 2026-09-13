@@ -447,7 +447,11 @@ async function getJson<T>(
 
 	if (response.status === 404) {
 		throw new SleeperRequestError(
-			`Sleeper returned 404 for ${url}.`,
+			failureCode === "SLEEPER_USER_NOT_FOUND"
+				? "Sleeper user was not found."
+				: failureCode === "SLEEPER_LEAGUE_NOT_FOUND"
+					? "Sleeper league was not found."
+					: "Sleeper returned 404.",
 			failureCode,
 			404,
 		);
@@ -464,7 +468,11 @@ async function getJson<T>(
 	const text = await response.text();
 	if (!text || text === "null") {
 		throw new SleeperRequestError(
-			`Sleeper returned an empty response for ${url}.`,
+			failureCode === "SLEEPER_USER_NOT_FOUND"
+				? "Sleeper user was not found."
+				: failureCode === "SLEEPER_LEAGUE_NOT_FOUND"
+					? "No NFL leagues found for that Sleeper user."
+					: "Sleeper returned an empty response.",
 			failureCode,
 			404,
 		);

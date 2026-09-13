@@ -241,7 +241,46 @@ export class WorkflowStatusDO extends DurableObject {
 		return Response.json(body, { status: 500 });
 	}
 
-	async refreshIntel(): Promise<CommandCenterState> {
+	async refreshIntel(sleeper?: {
+		fetchImpl?: typeof fetch;
+	}): Promise<CommandCenterState> {
+		const source = this.fantasyState.activeRoster.source;
+		if (source?.provider === "sleeper" && source.username) {
+			try {
+				const state = await this.importRoster(
+					{
+						username: source.username,
+						leagueId: source.leagueId,
+						rosterId: source.rosterId,
+					},
+					sleeper,
+				);
+				if (state.liveAlerts[0]) {
+					state.liveAlerts[0].message = `Re-synced ${state.activeRoster.teamName} from Sleeper (@${source.username}).`;
+				}
+				await this.ctx.storage.put("fantasyState", this.fantasyState);
+				this.broadcast(this.getFantasyStateMessage());
+				return state;
+			} catch (error) {
+				this.fantasyState.liveAlerts.unshift({
+					id: `alt_${Date.now()}`,
+					time: new Date().toLocaleTimeString("en-US", {
+						hour: "2-digit",
+						minute: "2-digit",
+					}),
+					type: "GROK",
+					message:
+						error instanceof Error
+							? `Sleeper re-sync failed: ${error.message}`
+							: "Sleeper re-sync failed.",
+					severity: "danger",
+				});
+				await this.ctx.storage.put("fantasyState", this.fantasyState);
+				this.broadcast(this.getFantasyStateMessage());
+				return this.fantasyState;
+			}
+		}
+
 		this.fantasyState.intelPacket.asOf = new Date().toLocaleTimeString(
 			"en-US",
 			{
@@ -251,7 +290,7 @@ export class WorkflowStatusDO extends DurableObject {
 			},
 		);
 		this.fantasyState.intelPacket.fresh = true;
-		this.fantasyState.intelPacket.hash = `intel_wk14_${Date.now().toString(16).slice(-6)}`;
+		this.fantasyState.intelPacket.hash = `intel_wk${this.fantasyState.selectedWeek}_${Date.now().toString(16).slice(-6)}`;
 
 		// Add an alert
 		this.fantasyState.liveAlerts.unshift({

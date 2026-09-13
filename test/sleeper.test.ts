@@ -337,6 +337,15 @@ describe("WorkflowStatusDO Sleeper import", () => {
 		const persisted = await stub.getFantasyState();
 		expect(persisted.activeRoster.source?.provider).toBe("sleeper");
 		expect(persisted.intelPacket.hash).toContain("sleeper_");
+
+		const refreshed = await runInDurableObject(
+			stub,
+			async (instance: WorkflowStatusDO) => {
+				return instance.refreshIntel({ fetchImpl: mockSleeperFetch() });
+			},
+		);
+		expect(refreshed.activeRoster.teamName).toBe("Live Pulse");
+		expect(refreshed.liveAlerts[0].message).toContain("Re-synced");
 	});
 
 	it("returns 400 when the import body has no username", async () => {
