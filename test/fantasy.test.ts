@@ -273,3 +273,105 @@ describe("xAI request shape", () => {
 		expect(capturedBody.messages?.[1]?.content).not.toContain("Ja'Marr Chase");
 	});
 });
+
+describe("Sleeper Roster Import", () => {
+	const mockSleeperLeague = {
+		league_id: "1122334455",
+		name: "Champions League",
+		total_rosters: 12,
+		season: "2024",
+	};
+
+	const mockSleeperRosters = [
+		{
+			roster_id: 1,
+			owner_id: "user_101",
+			league_id: "1122334455",
+			starters: ["4984", "8183", "7564", "4035", "11439", "BAL"],
+			players: ["4984", "8183", "7564", "4035", "11439", "BAL", "9221", "9493", "8136"],
+			settings: { wins: 8, losses: 5, ties: 0, fpts: 1420 },
+		},
+		{
+			roster_id: 2,
+			owner_id: "user_102",
+			league_id: "1122334455",
+			starters: ["8138", "7553"],
+			players: ["8138", "7553", "7543"],
+			settings: { wins: 6, losses: 7, ties: 0, fpts: 1310 },
+		},
+	];
+
+	const mockSleeperUsers = [
+		{
+			user_id: "user_101",
+			username: "gridiron_king",
+			display_name: "Gridiron King",
+			metadata: { team_name: "Apex Predators" },
+		},
+		{
+			user_id: "user_102",
+			username: "rival_boss",
+			display_name: "Rival Boss",
+		},
+	];
+
+	function createMockSleeperFetch(): typeof fetch {
+		return async (input) => {
+			const url = String(input);
+			if (url.endsWith("/league/1122334455")) {
+				return Response.json(mockSleeperLeague);
+			}
+			if (url.endsWith("/league/1122334455/rosters")) {
+				return Response.json(mockSleeperRosters);
+			}
+			if (url.endsWith("/league/1122334455/users")) {
+				return Response.json(mockSleeperUsers);
+			}
+			return new Response("Not found", { status: 404 });
+		};
+	}
+
+	it("imports real Sleeper roster and maps players, metadata, and record", async () => {
+		const { importSleeperRoster } = await import("../src/sleeper-client");
+		const roster = await importSleeperRoster(
+			{ leagueId: "1122334455", userOrRosterId: "gridiron_king" },
+			createMockSleeperFetch(),
+		);
+
+		expect(roster.teamName).toContain("Apex Predators");
+		expect(roster.owner).toContain("Gridiron King");
+		expect(roster.record).toBe("8-5");
+		expect(roster.starters.length).toBe(6);
+		expect(roster.bench.length).toBe(3);
+
+		const starterNames = roster.starters.map((s) => s.name);
+		expect(starterNames).toContain("Josh Allen");
+		expect(starterNames).toContain("Bijan Robinson");
+		expect(starterNames).toContain("Ja'Marr Chase");
+
+		const benchNames = roster.bench.map((b) => b.name);
+		expect(benchNames).toContain("Zach Charbonnet");
+	});
+
+	it("updates Durable Object activeRoster on /roster/sleeper-import", async () => {
+		const doId = env.WORKFLOW_STATUS.idFromName("test_sleeper_do");
+		const stub = env.WORKFLOW_STATUS.get(doId);
+
+		const stateBefore = await stub.getFantasyState();
+		expect(stateBefore.activeRoster.teamName).toBe("Neural Gridiron Pulse");
+
+		await runInDurableObject(stub, async (instance: WorkflowStatusDO) => {
+			return instance.importSleeper(
+				"1122334455",
+				"gridiron_king",
+				createMockSleeperFetch(),
+			);
+		});
+
+		const stateAfter = await stub.getFantasyState();
+		expect(stateAfter.activeRoster.teamName).toContain("Apex Predators");
+		expect(stateAfter.activeRoster.starters.length).toBe(6);
+		expect(stateAfter.liveAlerts[0].type).toBe("LINEUP");
+		expect(stateAfter.liveAlerts[0].message).toContain("Sleeper Roster Imported");
+	});
+});
