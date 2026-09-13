@@ -50,6 +50,9 @@
 		}
 	],
 	"upload_source_maps": true,
+	"triggers": {
+		"crons": ["0 */3 * * 0,4,5,6"]
+	},
 	/**
 	 * Secrets (never commit values):
 	 * - XAI_API_KEY: xAI Grok key for live start/sit Evaluate

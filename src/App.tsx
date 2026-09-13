@@ -7,6 +7,9 @@ import { useWorkflowWebSocket } from "./hooks/useWorkflowWebSocket";
 import { WORKFLOW_STEPS } from "./types";
 
 function App() {
+	const [debug] = useState(() =>
+		new URLSearchParams(window.location.search).has("debug"),
+	);
 	const [viewMode, setViewMode] = useState<"fantasy" | "workflows">("fantasy");
 	const [instanceId, setInstanceId] = useState<string | null>(null);
 	const [isStarting, setIsStarting] = useState(false);
@@ -77,7 +80,7 @@ function App() {
 						</div>
 					</div>
 
-					{/* View Switcher & Canvas Link */}
+					{debug && (
 					<div className="flex items-center gap-2">
 						<div className="flex p-0.5 rounded-lg bg-neutral-200/60 dark:bg-neutral-800/60 text-xs">
 							<button
@@ -111,6 +114,7 @@ function App() {
 							Canvas Architecture ↗
 						</a>
 					</div>
+					)}
 				</div>
 			</header>
 

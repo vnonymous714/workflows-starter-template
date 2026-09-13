@@ -31,6 +31,9 @@ export function FantasyCommandCenter() {
 	const [wsConnected, setWsConnected] = useState<boolean>(false);
 	const [useLegacySimulation, setUseLegacySimulation] =
 		useState<boolean>(false);
+	const [debug] = useState(() =>
+		new URLSearchParams(window.location.search).has("debug"),
+	);
 	const [sleeperUsername, setSleeperUsername] = useState("");
 	const [sleeperLeagueId, setSleeperLeagueId] = useState("");
 	const [isImporting, setIsImporting] = useState(false);
@@ -313,6 +316,19 @@ export function FantasyCommandCenter() {
 	const isSleeperRoster = state.activeRoster.source?.provider === "sleeper";
 	const sleeperLeagues = state.activeRoster.source?.availableLeagues ?? [];
 
+	function weatherTagFor(player: FantasyPlayer): string | undefined {
+		const wx = state.intelPacket.weather.find((item) =>
+			item.game.includes(player.team),
+		);
+		if (wx?.weatherTag && wx.weatherTag !== "NONE") return wx.weatherTag;
+		if (wx?.isDome) return "DOME";
+		return undefined;
+	}
+
+	function ptsLabel(player: FantasyPlayer): string {
+		return player.projPts > 0 ? player.projPts.toFixed(1) : "—";
+	}
+
 	return (
 		<div className="flex flex-col h-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden shadow-sm">
 			{/* Top Bar */}
@@ -381,6 +397,7 @@ export function FantasyCommandCenter() {
 								: "Sync 20-Handle Intel"}
 					</button>
 
+					{debug && (
 					<a
 						href="/cursor/stores/user/canvases/516d73d0-c4b9-4ca4-9cf0-cab3403f8f8c/source.canvas.tsx"
 						target="_blank"
@@ -402,6 +419,7 @@ export function FantasyCommandCenter() {
 						</svg>
 						Open Canvas Architecture
 					</a>
+					)}
 				</div>
 			</div>
 
@@ -468,8 +486,10 @@ export function FantasyCommandCenter() {
 								: "border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200"
 						}`}
 					>
-						Lineup & Matchup Optimizer
+						Sunday HUD
 					</button>
+					{debug && (
+						<>
 					<button
 						onClick={() => setActiveTab("grok")}
 						className={`py-2.5 text-xs font-medium border-b-2 transition-colors ${
@@ -478,7 +498,7 @@ export function FantasyCommandCenter() {
 								: "border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200"
 						}`}
 					>
-						Grok Beat Radar (20 Handles)
+						Grok Beat Radar
 					</button>
 					<button
 						onClick={() => setActiveTab("token")}
@@ -488,7 +508,7 @@ export function FantasyCommandCenter() {
 								: "border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200"
 						}`}
 					>
-						Token Optimization Inspector
+						Token Inspector
 					</button>
 					<button
 						onClick={() => setActiveTab("weather")}
@@ -498,8 +518,10 @@ export function FantasyCommandCenter() {
 								: "border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200"
 						}`}
 					>
-						Weather & Stadium Conditions
+						Weather detail
 					</button>
+						</>
+					)}
 				</div>
 
 				<div className="flex items-center gap-2">
@@ -529,12 +551,13 @@ export function FantasyCommandCenter() {
 									Active Starters ({state.activeRoster.starters.length})
 								</h2>
 								<span className="text-xs text-neutral-500">
-									Total Proj:{" "}
+									Total{" "}
 									<strong className="text-neutral-900 dark:text-neutral-100">
-										{state.activeRoster.starters
-											.reduce((acc: number, p: FantasyPlayer) => acc + p.projPts, 0)
-											.toFixed(1)}{" "}
-										pts
+										{state.activeRoster.starters.some((p) => p.projPts > 0)
+											? `${state.activeRoster.starters
+													.reduce((acc: number, p: FantasyPlayer) => acc + p.projPts, 0)
+													.toFixed(1)} pts`
+											: "Sleeper lineup — no projection feed"}
 									</strong>
 								</span>
 							</div>
@@ -574,6 +597,11 @@ export function FantasyCommandCenter() {
 																{player.status}
 															</span>
 														)}
+														{weatherTagFor(player) && (
+															<span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300">
+																{weatherTagFor(player)}
+															</span>
+														)}
 													</div>
 													{player.injuryDesc && (
 														<p className="text-[11px] text-red-600 dark:text-red-400 mt-0.5">
@@ -603,7 +631,7 @@ export function FantasyCommandCenter() {
 													</span>
 												)}
 												<span className="font-mono text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-													{player.projPts.toFixed(1)}
+													{ptsLabel(player)}
 												</span>
 											</div>
 										</div>
@@ -646,18 +674,26 @@ export function FantasyCommandCenter() {
 															<span className="text-xs text-neutral-500">
 																{player.team} · {player.opp}
 															</span>
+															{player.status !== "ACTIVE" && (
+																<span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+																	{player.status}
+																</span>
+															)}
+															{weatherTagFor(player) && (
+																<span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300">
+																	{weatherTagFor(player)}
+																</span>
+															)}
 														</div>
-														{player.tags && (
-															<div className="flex gap-1.5 mt-0.5">
-																{player.tags.map((t: string) => (
-																	<span
-																		key={t}
-																		className="text-[10px] text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.2 rounded"
-																	>
-																		{t}
-																	</span>
-																))}
-															</div>
+														{player.injuryDesc && (
+															<p className="text-[11px] text-red-600 dark:text-red-400 mt-0.5">
+																{player.injuryDesc}
+															</p>
+														)}
+														{player.weatherCondition && (
+															<p className="text-[11px] text-blue-600 dark:text-blue-400 mt-0.5">
+																{player.weatherCondition}
+															</p>
 														)}
 													</div>
 												</div>
@@ -675,7 +711,7 @@ export function FantasyCommandCenter() {
 														</span>
 													)}
 													<span className="font-mono text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-														{player.projPts.toFixed(1)}
+														{ptsLabel(player)}
 													</span>
 												</div>
 											</div>
@@ -707,7 +743,7 @@ export function FantasyCommandCenter() {
 											{starterPlayer?.name || "None"}
 										</div>
 										<div className="text-xs text-neutral-500 font-mono">
-											{starterPlayer?.projPts.toFixed(1)} pts · {starterPlayer?.team}
+											{starterPlayer ? `${ptsLabel(starterPlayer)} · ${starterPlayer.team}` : ""}
 										</div>
 									</div>
 
@@ -719,7 +755,7 @@ export function FantasyCommandCenter() {
 											{benchPlayer?.name || "None"}
 										</div>
 										<div className="text-xs text-neutral-500 font-mono">
-											{benchPlayer?.projPts.toFixed(1)} pts · {benchPlayer?.team}
+											{benchPlayer ? `${ptsLabel(benchPlayer)} · ${benchPlayer.team}` : ""}
 										</div>
 									</div>
 								</div>
@@ -843,6 +879,12 @@ export function FantasyCommandCenter() {
 								<h3 className="text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-3">
 									Live Intelligence Stream
 								</h3>
+								{state.intelPacket.beatReports.length === 0 &&
+									state.liveAlerts.every((alert) => alert.type !== "INJURY") && (
+										<p className="text-[11px] text-neutral-500 mb-2">
+											No X beat ingest. Injury tags come from Sleeper; weather from ESPN/NWS.
+										</p>
+									)}
 								<div className="space-y-2">
 									{state.liveAlerts.map(
 										(alert: {
@@ -892,15 +934,22 @@ export function FantasyCommandCenter() {
 									Curated Beat Reporter 20-Handle Allowlist
 								</h2>
 								<p className="text-xs text-neutral-500">
-									Ingested in real-time by Grok 4.6. No noise, no open web firehose.
+									{state.intelPacket.beatReports.length > 0
+										? `${state.intelPacket.beatReports.length} cached beat items`
+										: "No live 20-handle ingest. X firehose is not wired yet."}
 								</p>
 							</div>
 							<span className="px-2 py-1 rounded bg-neutral-100 dark:bg-neutral-800 font-mono text-xs text-neutral-600 dark:text-neutral-300">
-								4 Verified Signals Synced
+								{state.intelPacket.beatReports.length} signals
 							</span>
 						</div>
 
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+							{state.intelPacket.beatReports.length === 0 && (
+								<p className="text-xs text-neutral-500 md:col-span-2">
+									Beat radar is empty until X ingest is wired. Start/sit still uses Sleeper injuries and NWS/ESPN weather in the CSSP packet.
+								</p>
+							)}
 							{state.intelPacket.beatReports.map((report: BeatReporterIntel) => (
 								<div
 									key={report.id}

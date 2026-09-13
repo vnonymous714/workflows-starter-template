@@ -330,7 +330,7 @@ export class WorkflowStatusDO extends DurableObject {
 			fresh: false,
 			hash: `sleeper_${leagueId}_${rosterId}_wk${imported.week}`,
 			injuries: imported.injuries,
-			weather: [],
+			weather: imported.weather,
 			beatReports: [],
 		};
 		this.fantasyState.recommendations = [];
@@ -347,6 +347,23 @@ export class WorkflowStatusDO extends DurableObject {
 				severity: "success",
 			},
 		];
+		const flaggedWeather = imported.weather.filter(
+			(wx) => wx.weatherTag !== "NONE",
+		);
+		if (flaggedWeather.length > 0) {
+			this.fantasyState.liveAlerts.unshift({
+				id: `alt_wx_${Date.now()}`,
+				time: new Date().toLocaleTimeString("en-US", {
+					hour: "2-digit",
+					minute: "2-digit",
+				}),
+				type: "WEATHER",
+				message: flaggedWeather
+					.map((wx) => `${wx.game} ${wx.weatherTag}`)
+					.join(" · "),
+				severity: "warning",
+			});
+		}
 
 		await this.ctx.storage.put("fantasyState", this.fantasyState);
 		this.broadcast(this.getFantasyStateMessage());

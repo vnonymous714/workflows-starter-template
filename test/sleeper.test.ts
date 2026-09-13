@@ -214,8 +214,14 @@ function mockSleeperFetch(): typeof fetch {
 			return jsonResponse({
 				events: [
 					{
+						weather: { temperature: 27, displayValue: "Windy" },
 						competitions: [
 							{
+								venue: {
+									indoor: false,
+									fullName: "Highmark Stadium",
+									address: { city: "Orchard Park" },
+								},
 								competitors: [
 									{
 										homeAway: "home",
@@ -230,6 +236,29 @@ function mockSleeperFetch(): typeof fetch {
 						],
 					},
 				],
+			});
+		}
+		if (url.includes("api.weather.gov/points/")) {
+			return jsonResponse({
+				properties: {
+					forecastHourly:
+						"https://api.weather.gov/gridpoints/BUF/39,42/forecast/hourly",
+				},
+			});
+		}
+		if (url.includes("api.weather.gov/gridpoints/")) {
+			return jsonResponse({
+				properties: {
+					periods: [
+						{
+							temperature: 27,
+							windSpeed: "18 mph",
+							windGust: "28 mph",
+							shortForecast: "Windy",
+							probabilityOfPrecipitation: { value: 45 },
+						},
+					],
+				},
 			});
 		}
 		throw new Error(`Unexpected fetch: ${url}`);
@@ -297,6 +326,10 @@ describe("importSleeperRoster", () => {
 		expect(kyren?.status).toBe("QUESTIONABLE");
 		expect(kyren?.pos).toBe("RB");
 		expect(kyren?.opp).toBe("@ BUF");
+		expect(kyren?.weatherCondition).toContain("PASS-FADE");
+		expect(result.weather.some((wx) => wx.weatherTag === "PASS-FADE")).toBe(
+			true,
+		);
 		const kicker = result.roster.starters.find((player) => player.id === "4227");
 		expect(kicker?.pos).toBe("K");
 		expect(result.injuries.some((item) => item.playerId === "6794")).toBe(true);
@@ -329,10 +362,12 @@ describe("WorkflowStatusDO Sleeper import", () => {
 		expect(after.activeRoster.teamName).toBe("Live Pulse");
 		expect(after.activeRoster.starters).toHaveLength(8);
 		expect(after.intelPacket.beatReports).toHaveLength(0);
-		expect(after.intelPacket.weather).toHaveLength(0);
+		expect(after.intelPacket.weather.length).toBeGreaterThan(0);
 		expect(after.recommendations).toHaveLength(0);
-		expect(after.liveAlerts[0].type).toBe("LINEUP");
-		expect(after.liveAlerts[0].message).toContain("Live Pulse");
+		expect(after.liveAlerts.some((alert) => alert.type === "LINEUP")).toBe(true);
+		expect(after.liveAlerts.some((alert) => alert.message.includes("Live Pulse"))).toBe(
+			true,
+		);
 
 		const persisted = await stub.getFantasyState();
 		expect(persisted.activeRoster.source?.provider).toBe("sleeper");

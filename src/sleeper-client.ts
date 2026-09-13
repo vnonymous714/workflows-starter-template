@@ -5,11 +5,19 @@ import type {
 	Position,
 	SleeperErrorCode,
 	SleeperLeagueOption,
+	WeatherIntel,
 } from "./types/fantasy";
+import {
+	applyWeatherToPlayers,
+	buildWeatherIntel,
+	ESPN_SCOREBOARD_URL,
+	loadEspnGames,
+	normalizeTeam,
+} from "./nfl-intel";
+
+export { ESPN_SCOREBOARD_URL };
 
 export const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
-export const ESPN_SCOREBOARD_URL =
-	"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 
 export class SleeperRequestError extends Error {
 	readonly code: SleeperErrorCode;
@@ -34,6 +42,7 @@ export interface SleeperImportResult {
 	season: string;
 	roster: LeagueRoster;
 	injuries: InjuryReportIntel[];
+	weather: WeatherIntel[];
 }
 
 interface SleeperNflState {
@@ -89,17 +98,6 @@ interface SleeperPlayer {
 	injury_body_part?: string | null;
 	injury_notes?: string | null;
 	status?: string | null;
-}
-
-interface EspnScoreboard {
-	events?: Array<{
-		competitions?: Array<{
-			competitors?: Array<{
-				homeAway?: string;
-				team?: { abbreviation?: string };
-			}>;
-		}>;
-	}>;
 }
 
 const STARTER_SLOT_SKIP = new Set(["BN", "IR", "TAXI"]);
@@ -169,7 +167,7 @@ export async function importSleeperRoster(
 		);
 	}
 
-	const [rosters, leagueUsers, players, opponents] = await Promise.all([
+	const [rosters, leagueUsers, players, espn] = await Promise.all([
 		getJson<SleeperRoster[]>(
 			fetchImpl,
 			`${SLEEPER_API_BASE}/league/${league.league_id}/rosters`,
@@ -185,7 +183,7 @@ export async function importSleeperRoster(
 			`${SLEEPER_API_BASE}/players/nfl`,
 			"SLEEPER_REQUEST_FAILED",
 		),
-		loadOpponentMap(fetchImpl),
+		loadEspnGames(fetchImpl),
 	]);
 
 	const roster = pickRoster(rosters, user.user_id, input.rosterId);
@@ -208,15 +206,26 @@ export async function importSleeperRoster(
 		user,
 		username,
 		players,
-		opponents,
+		opponents: espn.opponents,
 		availableLeagues,
 	});
+
+	const rosterTeams = [
+		...mapped.roster.starters,
+		...mapped.roster.bench,
+	].map((player) => player.team);
+	const weather = await buildWeatherIntel(fetchImpl, espn.games, rosterTeams);
+	applyWeatherToPlayers(
+		[...mapped.roster.starters, ...mapped.roster.bench],
+		weather,
+	);
 
 	return {
 		week,
 		season,
 		roster: mapped.roster,
 		injuries: mapped.injuries,
+		weather,
 	};
 }
 
@@ -395,37 +404,6 @@ function toFantasyPlayer(
 
 function isRealPlayerId(id: string | null | undefined): id is string {
 	return Boolean(id && id !== "0");
-}
-
-function normalizeTeam(abbr: string): string {
-	const team = abbr.toUpperCase();
-	if (team === "JAC") return "JAX";
-	if (team === "WSH") return "WAS";
-	return team;
-}
-
-async function loadOpponentMap(fetchImpl: typeof fetch): Promise<Map<string, string>> {
-	const map = new Map<string, string>();
-	try {
-		const board = await getJson<EspnScoreboard>(
-			fetchImpl,
-			ESPN_SCOREBOARD_URL,
-			"SLEEPER_REQUEST_FAILED",
-		);
-		for (const event of board.events ?? []) {
-			const competitors = event.competitions?.[0]?.competitors ?? [];
-			const home = competitors.find((item) => item.homeAway === "home");
-			const away = competitors.find((item) => item.homeAway === "away");
-			const homeAbbr = normalizeTeam(home?.team?.abbreviation ?? "");
-			const awayAbbr = normalizeTeam(away?.team?.abbreviation ?? "");
-			if (!homeAbbr || !awayAbbr) continue;
-			map.set(homeAbbr, `vs ${awayAbbr}`);
-			map.set(awayAbbr, `@ ${homeAbbr}`);
-		}
-	} catch {
-		// Opponent lines are optional; Sleeper import still succeeds without ESPN.
-	}
-	return map;
 }
 
 async function getJson<T>(

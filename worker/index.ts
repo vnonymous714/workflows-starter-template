@@ -140,4 +140,14 @@ export default {
 
 		return new Response("Not found", { status: 404 });
 	},
+
+	async scheduled(
+		_controller: ScheduledController,
+		env: Env,
+		_ctx: ExecutionContext,
+	): Promise<void> {
+		const doId = env.WORKFLOW_STATUS.idFromName("default_team");
+		const stub = env.WORKFLOW_STATUS.get(doId);
+		await stub.refreshIntel();
+	},
 };
