@@ -5,12 +5,42 @@ import type {
 	TokenMetrics,
 } from "./types/fantasy";
 
+export function pickDefaultMatchup(roster: LeagueRoster): {
+	starterId: string;
+	benchId: string;
+} {
+	const pool = [...roster.starters, ...roster.bench];
+	const byName = (name: string) =>
+		pool.find((player) => player.name.toLowerCase() === name.toLowerCase());
+	const kyren = byName("Kyren Williams");
+	const charbonnet = byName("Zach Charbonnet");
+	if (kyren && charbonnet) {
+		const kyrenStarts = roster.starters.some((player) => player.id === kyren.id);
+		return kyrenStarts
+			? { starterId: kyren.id, benchId: charbonnet.id }
+			: { starterId: charbonnet.id, benchId: kyren.id };
+	}
+
+	for (const starter of roster.starters) {
+		const bench = roster.bench.find((player) => player.pos === starter.pos);
+		if (bench) {
+			return { starterId: starter.id, benchId: bench.id };
+		}
+	}
+
+	return {
+		starterId: roster.starters[0]?.id ?? "",
+		benchId: roster.bench[0]?.id ?? roster.starters[1]?.id ?? "",
+	};
+}
+
 export const INITIAL_ROSTER: LeagueRoster = {
 	teamId: "tm_gridiron_pulse",
 	teamName: "Neural Gridiron Pulse",
 	owner: "You (Command Center)",
 	record: "9-4",
 	rank: 2,
+	source: { provider: "seed" },
 	starters: [
 		{
 			id: "p_jallen",

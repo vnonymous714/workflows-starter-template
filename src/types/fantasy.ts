@@ -121,6 +121,22 @@ export interface TokenMetrics {
 	latencyReductionMs: number;
 }
 
+export interface SleeperLeagueOption {
+	leagueId: string;
+	name: string;
+}
+
+export interface RosterImportMeta {
+	provider: "seed" | "sleeper";
+	username?: string;
+	userId?: string;
+	leagueId?: string;
+	leagueName?: string;
+	rosterId?: number;
+	importedAt?: number;
+	availableLeagues?: SleeperLeagueOption[];
+}
+
 export interface LeagueRoster {
 	teamId: string;
 	teamName: string;
@@ -129,6 +145,19 @@ export interface LeagueRoster {
 	rank: number;
 	starters: FantasyPlayer[];
 	bench: FantasyPlayer[];
+	source?: RosterImportMeta;
+}
+
+export type SleeperErrorCode =
+	| "SLEEPER_USERNAME_REQUIRED"
+	| "SLEEPER_USER_NOT_FOUND"
+	| "SLEEPER_LEAGUE_NOT_FOUND"
+	| "SLEEPER_ROSTER_NOT_FOUND"
+	| "SLEEPER_REQUEST_FAILED";
+
+export interface SleeperApiErrorBody {
+	error: string;
+	code: SleeperErrorCode;
 }
 
 export interface CommandCenterState {

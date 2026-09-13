@@ -3,6 +3,7 @@ import type {
 	CommandCenterState,
 	GrokApiErrorBody,
 	GrokDecisionResponse,
+	SleeperApiErrorBody,
 } from "../src/types/fantasy";
 import { buildCommandCenterState } from "../src/fantasy-intel";
 import {
@@ -10,6 +11,11 @@ import {
 	GrokRequestError,
 	MissingXaiApiKeyError,
 } from "../src/grok-client";
+import {
+	importSleeperRoster,
+	SleeperRequestError,
+	type SleeperImportInput,
+} from "../src/sleeper-client";
 
 /**
  * WorkflowStatusDO - Durable Object for managing workflow and fantasy command center state.
@@ -118,6 +124,16 @@ export class WorkflowStatusDO extends DurableObject {
 			return Response.json(state);
 		}
 
+		if (url.pathname === "/roster/import" && request.method === "POST") {
+			const body = (await request.json().catch(() => ({}))) as SleeperImportInput;
+			try {
+				const state = await this.importRoster(body);
+				return Response.json(state);
+			} catch (error) {
+				return this.sleeperErrorResponse(error);
+			}
+		}
+
 		return new Response("Expected WebSocket or API route", { status: 400 });
 	}
 
@@ -188,6 +204,21 @@ export class WorkflowStatusDO extends DurableObject {
 		return decision;
 	}
 
+	private sleeperErrorResponse(error: unknown): Response {
+		if (error instanceof SleeperRequestError) {
+			const body: SleeperApiErrorBody = {
+				error: error.message,
+				code: error.code,
+			};
+			return Response.json(body, { status: error.status });
+		}
+		const body: SleeperApiErrorBody = {
+			error: error instanceof Error ? error.message : "Sleeper import failed.",
+			code: "SLEEPER_REQUEST_FAILED",
+		};
+		return Response.json(body, { status: 502 });
+	}
+
 	private grokErrorResponse(error: unknown): Response {
 		if (error instanceof MissingXaiApiKeyError) {
 			const body: GrokApiErrorBody = {
@@ -233,6 +264,50 @@ export class WorkflowStatusDO extends DurableObject {
 			message: "Grok Beat Intel refresh complete: 20 handles polled, cache verified fresh.",
 			severity: "success",
 		});
+
+		await this.ctx.storage.put("fantasyState", this.fantasyState);
+		this.broadcast(this.getFantasyStateMessage());
+		return this.fantasyState;
+	}
+
+	async importRoster(
+		input: SleeperImportInput,
+		sleeper?: { fetchImpl?: typeof fetch },
+	): Promise<CommandCenterState> {
+		const imported = await importSleeperRoster(input, sleeper?.fetchImpl ?? fetch);
+		const asOf = new Date().toLocaleTimeString("en-US", {
+			hour: "2-digit",
+			minute: "2-digit",
+			timeZoneName: "short",
+		});
+		const leagueId = imported.roster.source?.leagueId ?? "league";
+		const rosterId = imported.roster.source?.rosterId ?? imported.roster.teamId;
+
+		this.fantasyState.selectedWeek = imported.week;
+		this.fantasyState.activeRoster = imported.roster;
+		this.fantasyState.intelPacket = {
+			week: imported.week,
+			asOf,
+			fresh: false,
+			hash: `sleeper_${leagueId}_${rosterId}_wk${imported.week}`,
+			injuries: imported.injuries,
+			weather: [],
+			beatReports: [],
+		};
+		this.fantasyState.recommendations = [];
+		this.fantasyState.lastDecision = null;
+		this.fantasyState.liveAlerts = [
+			{
+				id: `alt_${Date.now()}`,
+				time: new Date().toLocaleTimeString("en-US", {
+					hour: "2-digit",
+					minute: "2-digit",
+				}),
+				type: "LINEUP",
+				message: `Imported ${imported.roster.teamName} from Sleeper (@${imported.roster.source?.username ?? input.username}). Demo Neural Gridiron Pulse roster replaced.`,
+				severity: "success",
+			},
+		];
 
 		await this.ctx.storage.put("fantasyState", this.fantasyState);
 		this.broadcast(this.getFantasyStateMessage());

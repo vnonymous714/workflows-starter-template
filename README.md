@@ -69,6 +69,19 @@ FRESH:1
 
 Evaluate (default **Kyren vs Charbonnet**) sends a compact CSSP packet from Durable Object state to xAI and persists the JSON verdict plus **actual** `usage` token counts. Missing `XAI_API_KEY` returns an error; it does not use canned Grok copy.
 
+## Live Sleeper roster
+
+The Command Center still seeds a demo “Neural Gridiron Pulse” lineup so Evaluate has a Kyren vs Charbonnet pair before you connect a league. Import replaces that seed with **one real Sleeper roster** (starters, bench, record, current NFL week, Sleeper injury tags). Canned beat-radar copy is cleared on import.
+
+```bash
+# From the Command Center header, or:
+curl -X POST http://localhost:5173/api/fantasy/roster/import \
+  -H 'content-type: application/json' \
+  -d '{"username":"your_sleeper_username"}'
+```
+
+Optional body fields: `leagueId`, `rosterId`. Public Sleeper API — no Sleeper token required.
+
 ### Set `XAI_API_KEY`
 
 Local:

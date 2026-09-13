@@ -12,6 +12,7 @@ import {
 	INITIAL_ROSTER,
 	INITIAL_INTEL,
 	INITIAL_TOKEN_METRICS,
+	pickDefaultMatchup,
 } from "../fantasy-intel";
 import { recommendationMatchesPlayer } from "../grok-client";
 
@@ -30,6 +31,10 @@ export function FantasyCommandCenter() {
 	const [wsConnected, setWsConnected] = useState<boolean>(false);
 	const [useLegacySimulation, setUseLegacySimulation] =
 		useState<boolean>(false);
+	const [sleeperUsername, setSleeperUsername] = useState("");
+	const [sleeperLeagueId, setSleeperLeagueId] = useState("");
+	const [isImporting, setIsImporting] = useState(false);
+	const [importError, setImportError] = useState<string | null>(null);
 
 	const [state, setState] = useState<CommandCenterState>({
 		selectedWeek: 14,
@@ -154,7 +159,60 @@ export function FantasyCommandCenter() {
 		};
 	}, []);
 
-	// Run Grok Evaluation
+	useEffect(() => {
+		const matchup = pickDefaultMatchup(state.activeRoster);
+		const ids = new Set([
+			...state.activeRoster.starters.map((player) => player.id),
+			...state.activeRoster.bench.map((player) => player.id),
+		]);
+		if (!ids.has(selectedStarter) || !ids.has(selectedBench)) {
+			if (matchup.starterId) setSelectedStarter(matchup.starterId);
+			if (matchup.benchId) setSelectedBench(matchup.benchId);
+		}
+	}, [state.activeRoster, selectedStarter, selectedBench]);
+
+	const handleImportSleeper = async (leagueId?: string) => {
+		const username = sleeperUsername.trim();
+		if (!username) {
+			setImportError("Enter a Sleeper username.");
+			return;
+		}
+
+		setIsImporting(true);
+		setImportError(null);
+		try {
+			const res = await fetch("/api/fantasy/roster/import", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					username,
+					leagueId: leagueId || sleeperLeagueId || undefined,
+				}),
+			});
+			const body: unknown = await res.json().catch(() => null);
+			if (!res.ok) {
+				const err = body as { error?: string } | null;
+				setImportError(err?.error ?? `Sleeper import failed (${res.status}).`);
+				return;
+			}
+
+			const updated = body as CommandCenterState;
+			setState(updated);
+			setLatestDecision(null);
+			const nextLeague = updated.activeRoster.source?.leagueId ?? "";
+			setSleeperLeagueId(nextLeague);
+			const matchup = pickDefaultMatchup(updated.activeRoster);
+			if (matchup.starterId) setSelectedStarter(matchup.starterId);
+			if (matchup.benchId) setSelectedBench(matchup.benchId);
+		} catch (e) {
+			setImportError(
+				e instanceof Error ? e.message : "Sleeper import failed.",
+			);
+		} finally {
+			setIsImporting(false);
+		}
+	};
+
 	const handleRunGrokDecision = async () => {
 		setIsEvaluating(true);
 		setEvaluateError(null);
@@ -252,6 +310,8 @@ export function FantasyCommandCenter() {
 	const benchPlayer = state.activeRoster.bench.find(
 		(p: FantasyPlayer) => p.id === selectedBench,
 	);
+	const isSleeperRoster = state.activeRoster.source?.provider === "sleeper";
+	const sleeperLeagues = state.activeRoster.source?.availableLeagues ?? [];
 
 	return (
 		<div className="flex flex-col h-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden shadow-sm">
@@ -271,6 +331,17 @@ export function FantasyCommandCenter() {
 							</span>
 							<span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-neutral-600 dark:text-neutral-400 bg-neutral-200 dark:bg-neutral-800">
 								Wk {state.selectedWeek}
+							</span>
+							<span
+								className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-medium ${
+									isSleeperRoster
+										? "bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300"
+										: "bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300"
+								}`}
+							>
+								{isSleeperRoster
+									? `SLEEPER @${state.activeRoster.source?.username}`
+									: "DEMO roster"}
 							</span>
 						</div>
 						<div className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -328,6 +399,58 @@ export function FantasyCommandCenter() {
 						Open Canvas Architecture
 					</a>
 				</div>
+			</div>
+
+			<div className="px-5 py-2.5 border-b border-neutral-200 dark:border-neutral-800 bg-white/80 dark:bg-neutral-950/40 flex flex-wrap items-center gap-2">
+				<label className="sr-only" htmlFor="sleeper-username">
+					Sleeper username
+				</label>
+				<input
+					id="sleeper-username"
+					value={sleeperUsername}
+					onChange={(event) => setSleeperUsername(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") {
+							void handleImportSleeper();
+						}
+					}}
+					placeholder="Sleeper username"
+					className="w-44 px-2.5 py-1.5 rounded-lg text-xs border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400"
+				/>
+				{sleeperLeagues.length > 1 && (
+					<select
+						value={sleeperLeagueId}
+						onChange={(event) => {
+							const next = event.target.value;
+							setSleeperLeagueId(next);
+							void handleImportSleeper(next);
+						}}
+						className="max-w-52 px-2 py-1.5 rounded-lg text-xs border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900"
+					>
+						{sleeperLeagues.map((league) => (
+							<option key={league.leagueId} value={league.leagueId}>
+								{league.name}
+							</option>
+						))}
+					</select>
+				)}
+				<button
+					onClick={() => void handleImportSleeper()}
+					disabled={isImporting}
+					className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-50"
+				>
+					{isImporting ? "Importing…" : "Import Sleeper roster"}
+				</button>
+				<span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+					{isSleeperRoster
+						? `${state.activeRoster.starters.length} starters · ${state.activeRoster.bench.length} bench from ${state.activeRoster.source?.leagueName ?? "Sleeper"}`
+						: "Replaces the hardcoded Neural Gridiron Pulse lineup with one live Sleeper team."}
+				</span>
+				{importError && (
+					<span className="text-[11px] text-red-600 dark:text-red-400">
+						{importError}
+					</span>
+				)}
 			</div>
 
 			{/* Navigation Tabs */}
