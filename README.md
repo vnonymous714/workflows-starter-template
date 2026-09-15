@@ -9,6 +9,7 @@ A high-performance, real-time **Fantasy Football Command Center** engineered wit
 - **Extreme Weather Filter:** Flags games in the extreme tail (wind $\ge 15\text{ mph}$, snow/freezing precipitation) and outputs discrete categorical impact tags (`PASS-FADE`, `K-FADE`, `RB-BUMP`, `SLOP`).
 - **Cloudflare Durable Object Backend:** Pins 12-team rosters and cached INTEL packets inside Durable Objects, eliminating redundant raw JSON dumps in LLM prompts.
 - **Interactive Command Center UI:** Real-time matchup evaluator, live starter/bench roster swapping, beat intelligence stream, and token benchmark inspector.
+- **Sleeper Roster Ingestion:** Import real league rosters directly into Durable Object state via `/api/fantasy/roster/sleeper-import`, discarding hardcoded roster placeholders.
 - **Dedicated Architecture Canvas:** Standalone visual blueprint and token budget reference housed at `/cursor/stores/user/canvases/516d73d0-c4b9-4ca4-9cf0-cab3403f8f8c/source.canvas.tsx`.
 
 ---

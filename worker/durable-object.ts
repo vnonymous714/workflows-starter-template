@@ -10,6 +10,7 @@ import {
 	GrokRequestError,
 	MissingXaiApiKeyError,
 } from "../src/grok-client";
+import { importSleeperRoster, SleeperApiError } from "../src/sleeper-client";
 
 /**
  * WorkflowStatusDO - Durable Object for managing workflow and fantasy command center state.
@@ -116,6 +117,36 @@ export class WorkflowStatusDO extends DurableObject {
 			};
 			const state = await this.swapRoster(body.starterId, body.benchId);
 			return Response.json(state);
+		}
+
+		if (url.pathname === "/roster/sleeper-import" && request.method === "POST") {
+			try {
+				const body = (await request.json()) as {
+					leagueId: string;
+					userOrRosterId?: string;
+				};
+				const state = await this.importSleeper(
+					body.leagueId,
+					body.userOrRosterId,
+				);
+				return Response.json(state);
+			} catch (error) {
+				if (error instanceof SleeperApiError) {
+					return Response.json(
+						{ error: error.message },
+						{ status: error.status },
+					);
+				}
+				return Response.json(
+					{
+						error:
+							error instanceof Error
+								? error.message
+								: "Sleeper import failed",
+					},
+					{ status: 500 },
+				);
+			}
 		}
 
 		return new Response("Expected WebSocket or API route", { status: 400 });
@@ -279,6 +310,33 @@ export class WorkflowStatusDO extends DurableObject {
 			this.broadcast(this.getFantasyStateMessage());
 		}
 
+		return this.fantasyState;
+	}
+
+	async importSleeper(
+		leagueId: string,
+		userOrRosterId?: string,
+		fetchImpl?: typeof fetch,
+	): Promise<CommandCenterState> {
+		const newRoster = await importSleeperRoster(
+			{ leagueId, userOrRosterId },
+			fetchImpl ?? fetch,
+		);
+
+		this.fantasyState.activeRoster = newRoster;
+		this.fantasyState.liveAlerts.unshift({
+			id: `alt_${Date.now()}`,
+			time: new Date().toLocaleTimeString("en-US", {
+				hour: "2-digit",
+				minute: "2-digit",
+			}),
+			type: "LINEUP",
+			message: `Sleeper Roster Imported: ${newRoster.teamName} (${newRoster.starters.length} starters, ${newRoster.bench.length} bench).`,
+			severity: "success",
+		});
+
+		await this.ctx.storage.put("fantasyState", this.fantasyState);
+		this.broadcast(this.getFantasyStateMessage());
 		return this.fantasyState;
 	}
 
