@@ -282,7 +282,7 @@ export const INITIAL_TOKEN_METRICS: TokenMetrics[] = [
 ];
 
 export function buildCommandCenterState(): CommandCenterState {
-	return {
+	return structuredClone({
 		selectedWeek: 14,
 		activeRoster: INITIAL_ROSTER,
 		intelPacket: INITIAL_INTEL,
@@ -353,7 +353,7 @@ export function buildCommandCenterState(): CommandCenterState {
 				severity: "success",
 			},
 		],
-	};
+	});
 }
 
 export {
