@@ -24,7 +24,7 @@ const mockRosters = [
 	},
 	{
 		roster_id: 2,
-		owner_id: "user_99",
+		owner_id: "99",
 		starters: ["8138", "7553"],
 		players: ["8138", "7553"],
 		settings: { wins: 6, losses: 7 },
@@ -58,7 +58,9 @@ function sleeperFetch(
 			return Response.json(overrides.rosters ?? mockRosters);
 		}
 		if (url.endsWith("/users")) {
-			return Response.json(overrides.usersBody ?? mockUsers);
+			return Response.json(
+				"usersBody" in overrides ? overrides.usersBody : mockUsers,
+			);
 		}
 		if (url.includes("/league/")) {
 			return Response.json(mockLeague);
