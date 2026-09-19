@@ -32,6 +32,11 @@ export function FantasyCommandCenter() {
 	const [espnS2Input, setEspnS2Input] = useState<string>("");
 	const [espnSwidInput, setEspnSwidInput] = useState<string>("");
 	const [showEspnModal, setShowEspnModal] = useState<boolean>(false);
+	const [showSleeperModal, setShowSleeperModal] = useState<boolean>(false);
+	const [sleeperLeagueId, setSleeperLeagueId] = useState<string>("");
+	const [sleeperUser, setSleeperUser] = useState<string>("");
+	const [isImportingSleeper, setIsImportingSleeper] = useState<boolean>(false);
+	const [sleeperError, setSleeperError] = useState<string | null>(null);
 	const [latestDecision, setLatestDecision] =
 		useState<GrokDecisionResponse | null>(null);
 	const [evaluateError, setEvaluateError] = useState<string | null>(null);
@@ -311,6 +316,50 @@ export function FantasyCommandCenter() {
 		}
 	};
 
+	// Import Sleeper Roster
+	const handleImportSleeper = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!sleeperLeagueId.trim()) {
+			setSleeperError("Please enter a valid Sleeper League ID");
+			return;
+		}
+		setIsImportingSleeper(true);
+		setSleeperError(null);
+		try {
+			const res = await fetch("/api/fantasy/roster/sleeper-import", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					leagueId: sleeperLeagueId.trim(),
+					userOrRosterId: sleeperUser.trim() || undefined,
+				}),
+			});
+			const body: unknown = await res.json().catch(() => null);
+			if (!res.ok) {
+				const err = body as { error?: string } | null;
+				setSleeperError(err?.error ?? `Import failed (${res.status})`);
+				return;
+			}
+			const updated = body as CommandCenterState;
+			setState(updated);
+			if (updated.activeRoster.starters.length > 0) {
+				setSelectedStarter(updated.activeRoster.starters[0].id);
+			}
+			if (updated.activeRoster.bench.length > 0) {
+				setSelectedBench(updated.activeRoster.bench[0].id);
+			}
+			setShowSleeperModal(false);
+			setSleeperLeagueId("");
+			setSleeperUser("");
+		} catch (err) {
+			setSleeperError(
+				err instanceof Error ? err.message : "Sleeper import request failed",
+			);
+		} finally {
+			setIsImportingSleeper(false);
+		}
+	};
+
 	const starterPlayer = state.activeRoster.starters.find(
 		(p: FantasyPlayer) => p.id === selectedStarter,
 	);
@@ -368,6 +417,26 @@ export function FantasyCommandCenter() {
 							/>
 						</svg>
 						Sync ESPN League
+					</button>
+
+					<button
+						onClick={() => setShowSleeperModal(true)}
+						className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors"
+					>
+						<svg
+							className="w-3.5 h-3.5"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+						>
+							<path
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								strokeWidth={2}
+								d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+							/>
+						</svg>
+						Import Sleeper Roster
 					</button>
 
 					<button
@@ -834,7 +903,9 @@ export function FantasyCommandCenter() {
 																? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
 																: alert.type === "WEATHER"
 																	? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-																	: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+																	: alert.type === "ESPN"
+																		? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+																		: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
 														}`}
 													>
 														{alert.type}
@@ -915,18 +986,18 @@ export function FantasyCommandCenter() {
 							</p>
 						</div>
 
-						{/* Benchmarks Grid */}
+						{/* Metric Grid */}
 						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
 							{state.tokenMetrics.map((metric: TokenMetrics) => (
 								<div
 									key={metric.queryType}
-									className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900"
+									className="p-3.5 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900"
 								>
-									<div className="text-xs font-medium text-neutral-500 mb-1">
+									<div className="text-[11px] font-semibold text-neutral-500 truncate">
 										{metric.queryType}
 									</div>
-									<div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-										-{metric.savingsPercent.toFixed(1)}%
+									<div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+										-{metric.savingsPercent}%
 									</div>
 									<div className="mt-2 text-[11px] text-neutral-600 dark:text-neutral-400 space-y-0.5">
 										<div>
@@ -1258,6 +1329,91 @@ FRESH:1`}
 									) : (
 										"Sync League Now"
 									)}
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			)}
+
+			{/* Sleeper Import Modal */}
+			{showSleeperModal && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+					<div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl max-w-md w-full p-6 shadow-xl relative animate-in fade-in zoom-in-95 duration-150">
+						<button
+							onClick={() => setShowSleeperModal(false)}
+							className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+						>
+							<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+
+						<div className="flex items-center gap-3 mb-4">
+							<div className="w-10 h-10 rounded-xl bg-emerald-600/10 text-emerald-600 flex items-center justify-center font-bold text-lg">
+								🏈
+							</div>
+							<div>
+								<h3 className="text-base font-bold text-neutral-900 dark:text-neutral-100">
+									Import Sleeper Roster
+								</h3>
+								<p className="text-xs text-neutral-500">
+									Drop hardcoded teams and load your real league into the Durable Object.
+								</p>
+							</div>
+						</div>
+
+						<form onSubmit={handleImportSleeper} className="space-y-4">
+							<div>
+								<label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+									Sleeper League ID <span className="text-red-500">*</span>
+								</label>
+								<input
+									type="text"
+									required
+									placeholder="e.g. 1125514649712000000"
+									value={sleeperLeagueId}
+									onChange={(e) => setSleeperLeagueId(e.target.value)}
+									className="w-full px-3 py-2 text-xs rounded-lg border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+								/>
+								<span className="text-[10px] text-neutral-400 mt-1 block">
+									Found in your Sleeper league URL: sleeper.app/leagues/&lt;LEAGUE_ID&gt;
+								</span>
+							</div>
+
+							<div>
+								<label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+									Username, User ID, or Roster # (Optional)
+								</label>
+								<input
+									type="text"
+									placeholder="e.g. your_sleeper_username or roster number (default 1)"
+									value={sleeperUser}
+									onChange={(e) => setSleeperUser(e.target.value)}
+									className="w-full px-3 py-2 text-xs rounded-lg border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+								/>
+							</div>
+
+							{sleeperError && (
+								<div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-400">
+									{sleeperError}
+								</div>
+							)}
+
+							<div className="flex gap-2 pt-2">
+								<button
+									type="button"
+									onClick={() => setShowSleeperModal(false)}
+									className="flex-1 py-2 px-3 rounded-lg text-xs font-medium border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300"
+								>
+									Cancel
+								</button>
+								<button
+									type="submit"
+									disabled={isImportingSleeper}
+									className="flex-1 py-2 px-3 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50"
+								>
+									{isImportingSleeper ? "Importing Roster..." : "Fetch & Save Roster"}
 								</button>
 							</div>
 						</form>

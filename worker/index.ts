@@ -15,13 +15,13 @@ export default {
 
 		// Fantasy Football Command Center API endpoints (routed through Durable Object)
 		if (url.pathname.startsWith("/api/fantasy/")) {
-			const subpath = url.pathname.replace("/api/fantasy", "");
+			const subpath = url.pathname.replace("/api", "");
 			const teamId = url.searchParams.get("teamId") || "default_team";
 			const doId = env.WORKFLOW_STATUS.idFromName(teamId);
 			const stub = env.WORKFLOW_STATUS.get(doId);
 
 			const doRequest = new Request(
-				new URL(subpath || "/state", request.url).toString(),
+				new URL(subpath, request.url).toString(),
 				{
 					method: request.method,
 					headers: request.headers,
@@ -119,8 +119,13 @@ export default {
 		if (url.pathname === "/ws") {
 			const instanceId =
 				url.searchParams.get("instanceId") ||
-				url.searchParams.get("teamId") ||
-				"default_team";
+				url.searchParams.get("teamId");
+
+			if (!instanceId) {
+				return new Response("instanceId query parameter required", {
+					status: 400,
+				});
+			}
 
 			const upgradeHeader = request.headers.get("Upgrade");
 			if (upgradeHeader !== "websocket") {
@@ -136,6 +141,10 @@ export default {
 					status: 500,
 				});
 			}
+		}
+
+		if (url.pathname.startsWith("/api/")) {
+			return Response.json({ error: "Not Found" }, { status: 404 });
 		}
 
 		return new Response("Not found", { status: 404 });

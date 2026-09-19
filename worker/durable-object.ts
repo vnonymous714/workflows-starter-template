@@ -18,6 +18,7 @@ import {
 	MissingEspnCredentialsError,
 	sanitizeEspnTeamRoster,
 } from "../src/espn-client";
+import { importSleeperRoster, SleeperApiError } from "../src/sleeper-client";
 
 /**
  * WorkflowStatusDO - Durable Object for managing workflow and fantasy command center state.
@@ -83,18 +84,32 @@ export class WorkflowStatusDO extends DurableObject {
 			// Use hibernation API - acceptWebSocket allows the DO to hibernate
 			this.ctx.acceptWebSocket(server);
 
-			// Send current workflow state and fantasy state immediately
-			server.send(JSON.stringify(this.getStateMessage()));
-			server.send(JSON.stringify(this.getFantasyStateMessage()));
+			// Check if connection is for fantasy or workflow
+			const isFantasy =
+				url.searchParams.has("teamId") ||
+				url.pathname.includes("fantasy");
+			if (isFantasy) {
+				server.send(JSON.stringify(this.getFantasyStateMessage()));
+			} else {
+				server.send(JSON.stringify(this.getStateMessage()));
+			}
 
 			return new Response(null, { status: 101, webSocket: client });
 		}
 
-		if (url.pathname === "/state" && request.method === "GET") {
+		if (
+			(url.pathname === "/fantasy/state" ||
+				url.pathname === "/api/fantasy/state") &&
+			request.method === "GET"
+		) {
 			return Response.json(this.fantasyState);
 		}
 
-		if (url.pathname === "/decide" && request.method === "POST") {
+		if (
+			(url.pathname === "/decide" ||
+				url.pathname === "/fantasy/decide") &&
+			request.method === "POST"
+		) {
 			const body = (await request.json()) as {
 				playerA: string;
 				playerB: string;
@@ -112,12 +127,20 @@ export class WorkflowStatusDO extends DurableObject {
 			}
 		}
 
-		if (url.pathname === "/intel/refresh" && request.method === "POST") {
+		if (
+			(url.pathname === "/intel/refresh" ||
+				url.pathname === "/fantasy/intel/refresh") &&
+			request.method === "POST"
+		) {
 			const state = await this.refreshIntel();
 			return Response.json(state);
 		}
 
-		if (url.pathname === "/roster/swap" && request.method === "POST") {
+		if (
+			(url.pathname === "/roster/swap" ||
+				url.pathname === "/fantasy/roster/swap") &&
+			request.method === "POST"
+		) {
 			const body = (await request.json()) as {
 				starterId: string;
 				benchId: string;
@@ -126,7 +149,11 @@ export class WorkflowStatusDO extends DurableObject {
 			return Response.json(state);
 		}
 
-		if (url.pathname === "/espn/sync" && request.method === "POST") {
+		if (
+			(url.pathname === "/espn/sync" ||
+				url.pathname === "/fantasy/espn/sync") &&
+			request.method === "POST"
+		) {
 			let body: EspnSyncCredentials = {};
 			try {
 				body = (await request.json()) as EspnSyncCredentials;
@@ -141,7 +168,41 @@ export class WorkflowStatusDO extends DurableObject {
 			}
 		}
 
-		return new Response("Expected WebSocket or API route", { status: 400 });
+		if (
+			(url.pathname === "/roster/sleeper-import" ||
+				url.pathname === "/fantasy/roster/sleeper-import") &&
+			request.method === "POST"
+		) {
+			try {
+				const body = (await request.json()) as {
+					leagueId: string;
+					userOrRosterId?: string;
+				};
+				const state = await this.importSleeper(
+					body.leagueId,
+					body.userOrRosterId,
+				);
+				return Response.json(state);
+			} catch (error) {
+				if (error instanceof SleeperApiError) {
+					return Response.json(
+						{ error: error.message },
+						{ status: error.status },
+					);
+				}
+				return Response.json(
+					{
+						error:
+							error instanceof Error
+								? error.message
+								: "Sleeper import failed",
+					},
+					{ status: 500 },
+				);
+			}
+		}
+
+		return new Response("Expected WebSocket", { status: 400 });
 	}
 
 	/**
@@ -423,6 +484,33 @@ export class WorkflowStatusDO extends DurableObject {
 			this.broadcast(this.getFantasyStateMessage());
 		}
 
+		return this.fantasyState;
+	}
+
+	async importSleeper(
+		leagueId: string,
+		userOrRosterId?: string,
+		fetchImpl?: typeof fetch,
+	): Promise<CommandCenterState> {
+		const newRoster = await importSleeperRoster(
+			{ leagueId, userOrRosterId },
+			fetchImpl ?? fetch,
+		);
+
+		this.fantasyState.activeRoster = newRoster;
+		this.fantasyState.liveAlerts.unshift({
+			id: `alt_${Date.now()}`,
+			time: new Date().toLocaleTimeString("en-US", {
+				hour: "2-digit",
+				minute: "2-digit",
+			}),
+			type: "LINEUP",
+			message: `Sleeper Roster Imported: ${newRoster.teamName} (${newRoster.starters.length} starters, ${newRoster.bench.length} bench).`,
+			severity: "success",
+		});
+
+		await this.ctx.storage.put("fantasyState", this.fantasyState);
+		this.broadcast(this.getFantasyStateMessage());
 		return this.fantasyState;
 	}
 

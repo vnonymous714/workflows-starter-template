@@ -141,7 +141,7 @@ export interface CommandCenterState {
 	liveAlerts: {
 		id: string;
 		time: string;
-		type: "INJURY" | "WEATHER" | "LINEUP" | "GROK" | "ESPN";
+		type: "INJURY" | "WEATHER" | "LINEUP" | "GROK" | "ESPN" | "SLEEPER";
 		message: string;
 		severity: "warning" | "danger" | "info" | "success";
 	}[];
