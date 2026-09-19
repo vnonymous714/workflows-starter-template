@@ -9,7 +9,7 @@ A high-performance, real-time **Fantasy Football Command Center** engineered wit
 - **Extreme Weather Filter:** Flags games in the extreme tail (wind $\ge 15\text{ mph}$, snow/freezing precipitation) and outputs discrete categorical impact tags (`PASS-FADE`, `K-FADE`, `RB-BUMP`, `SLOP`).
 - **Cloudflare Durable Object Backend:** Pins 12-team rosters and cached INTEL packets inside Durable Objects, eliminating redundant raw JSON dumps in LLM prompts.
 - **Interactive Command Center UI:** Real-time matchup evaluator, live starter/bench roster swapping, beat intelligence stream, and token benchmark inspector.
-- **Sleeper Roster Ingestion:** Import real league rosters directly into Durable Object state via `/api/fantasy/roster/sleeper-import`, discarding hardcoded roster placeholders.
+- **Live League Ingestion (ESPN & Sleeper):** Import real league rosters directly into Durable Object state via `/api/fantasy/espn/sync` (with `espn_s2`/`SWID` cookie auth and 98%+ payload compression) or `/api/fantasy/roster/sleeper-import`, discarding hardcoded placeholders.
 - **Dedicated Architecture Canvas:** Standalone visual blueprint and token budget reference housed at `/cursor/stores/user/canvases/516d73d0-c4b9-4ca4-9cf0-cab3403f8f8c/source.canvas.tsx`.
 
 ---
@@ -69,6 +69,50 @@ FRESH:1
 ## Live Grok start/sit
 
 Evaluate (default **Kyren vs Charbonnet**) sends a compact CSSP packet from Durable Object state to xAI and persists the JSON verdict plus **actual** `usage` token counts. Missing `XAI_API_KEY` returns an error; it does not use canned Grok copy.
+
+---
+
+## Live ESPN Fantasy League Integration
+
+The command center connects directly to ESPN Fantasy Football leagues using cookie authentication for private leagues:
+
+```typescript
+const response = await fetch(
+  `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${leagueId}?view=mRoster&view=mTeam`,
+  {
+    headers: {
+      Cookie: `espn_s2=${process.env.Espn_s2}; SWID=${process.env.Swid};`,
+    },
+  }
+);
+```
+
+### ESPN Payload Sanitizer & Token Compression
+
+Raw ESPN JSON dumps contain **85+ KB of nested telemetry** (~21,000 tokens) per team. Passing raw ESPN responses directly to LLMs causes rapid token exhaustion and high latency.
+
+Our Cloudflare Worker ingests and compresses raw ESPN responses into compact CSSP structures:
+- **Raw ESPN League Payload:** ~85,000+ bytes (~21,000 tokens)
+- **Sanitized CSSP Roster:** ~250–350 tokens (**>98% reduction**)
+- **Targeted Start/Sit Query:** Only delta matchups evaluated via Grok (<450 tokens)
+
+### Setting ESPN Credentials
+
+Local development:
+```bash
+cp .dev.vars.example .dev.vars
+# Fill in ESPN_S2, SWID, and ESPN_LEAGUE_ID in .dev.vars
+npm run dev
+```
+
+Deployed Worker secrets:
+```bash
+npx wrangler secret put ESPN_S2
+npx wrangler secret put SWID
+npx wrangler secret put ESPN_LEAGUE_ID
+```
+
+You can also trigger manual live syncs directly from the **Sync ESPN League** modal in the UI.
 
 ### Set `XAI_API_KEY`
 
