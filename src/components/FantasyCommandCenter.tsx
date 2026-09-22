@@ -8,12 +8,7 @@ import type {
 	TokenMetrics,
 	WeatherIntel,
 } from "../types/fantasy";
-import {
-	INITIAL_ROSTER,
-	INITIAL_INTEL,
-	INITIAL_TOKEN_METRICS,
-	pickDefaultMatchup,
-} from "../fantasy-intel";
+import { buildCommandCenterState, pickDefaultMatchup } from "../fantasy-intel";
 import { recommendationMatchesPlayer } from "../grok-client";
 
 export function FantasyCommandCenter() {
@@ -25,8 +20,6 @@ export function FantasyCommandCenter() {
 	const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
 	const [isSwapping, setIsSwapping] = useState<boolean>(false);
 	const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-	const [latestDecision, setLatestDecision] =
-		useState<GrokDecisionResponse | null>(null);
 	const [evaluateError, setEvaluateError] = useState<string | null>(null);
 	const [wsConnected, setWsConnected] = useState<boolean>(false);
 	const [useLegacySimulation, setUseLegacySimulation] =
@@ -39,81 +32,7 @@ export function FantasyCommandCenter() {
 	const [isImporting, setIsImporting] = useState(false);
 	const [importError, setImportError] = useState<string | null>(null);
 
-	const [state, setState] = useState<CommandCenterState>({
-		selectedWeek: 14,
-		activeRoster: INITIAL_ROSTER,
-		intelPacket: INITIAL_INTEL,
-		recommendations: [
-			{
-				id: "Kyren",
-				act: "SIT",
-				vs: "Charbonnet",
-				delta: -4.2,
-				conf: 0.78,
-				why: "Ankle DNP + game-time tag in 28mph freezing wind.",
-				src: "@RapSheet",
-				flags: ["INJ", "WX"],
-			},
-			{
-				id: "Charbonnet",
-				act: "START",
-				vs: "Kyren",
-				delta: 4.2,
-				conf: 0.85,
-				why: "Dome smash spot vs bottom-3 run defense.",
-				src: "@JFowlerNFL",
-				flags: ["INJ"],
-			},
-			{
-				id: "Waddle",
-				act: "SIT",
-				vs: "JSN",
-				delta: -2.1,
-				conf: 0.68,
-				why: "Sauce shadow coverage with MetLife crosswinds.",
-				src: "@AdamSchefter",
-				flags: ["SPLIT"],
-			},
-			{
-				id: "JSN",
-				act: "START",
-				vs: "Waddle",
-				delta: 2.1,
-				conf: 0.88,
-				why: "Full practice; slot target funnel in climate-controlled dome.",
-				src: "@bcondotta",
-				flags: ["NEWS"],
-			},
-		],
-		tokenMetrics: INITIAL_TOKEN_METRICS,
-		lastDecision: null,
-		liveAlerts: [
-			{
-				id: "alt_1",
-				time: "10:14 AM",
-				type: "INJURY",
-				message:
-					"Grok Alert: Kyren Williams hobbled in early warmups in Orchard Park. Recommend immediate bench swap.",
-				severity: "danger",
-			},
-			{
-				id: "alt_2",
-				time: "09:45 AM",
-				type: "WEATHER",
-				message:
-					"Highmark Stadium wind sustained at 18mph with 28mph gusts. Kicking and deep passing downgraded.",
-				severity: "warning",
-			},
-			{
-				id: "alt_3",
-				time: "08:30 AM",
-				type: "GROK",
-				message:
-					"20-Handle Beat Intelligence Synced: All 12 rostered player injury updates verified fresh.",
-				severity: "success",
-			},
-		],
-	});
+	const [state, setState] = useState(buildCommandCenterState);
 
 	// Fetch live state from Worker API / DO on mount
 	useEffect(() => {
@@ -122,7 +41,6 @@ export function FantasyCommandCenter() {
 			.then((data: CommandCenterState | null) => {
 				if (data) {
 					setState(data);
-					if (data.lastDecision) setLatestDecision(data.lastDecision);
 				}
 			})
 			.catch(() => {
@@ -148,9 +66,6 @@ export function FantasyCommandCenter() {
 				};
 				if (data.type === "fantasy_update" && data.payload) {
 					setState(data.payload);
-					if (data.payload.lastDecision) {
-						setLatestDecision(data.payload.lastDecision);
-					}
 				}
 			} catch {
 				// Ignore malformed frames
@@ -201,7 +116,6 @@ export function FantasyCommandCenter() {
 
 			const updated = body as CommandCenterState;
 			setState(updated);
-			setLatestDecision(null);
 			const nextLeague = updated.activeRoster.source?.leagueId ?? "";
 			setSleeperLeagueId(nextLeague);
 			const matchup = pickDefaultMatchup(updated.activeRoster);
@@ -240,7 +154,6 @@ export function FantasyCommandCenter() {
 			}
 
 			const decision = body as GrokDecisionResponse;
-			setLatestDecision(decision);
 			setState((prev: CommandCenterState) => {
 				const existingIds = new Set(
 					decision.recs.map((r: GrokRecommendation) => r.id),
@@ -315,6 +228,7 @@ export function FantasyCommandCenter() {
 	);
 	const isSleeperRoster = state.activeRoster.source?.provider === "sleeper";
 	const sleeperLeagues = state.activeRoster.source?.availableLeagues ?? [];
+	const latestDecision = state.lastDecision;
 
 	function weatherTagFor(player: FantasyPlayer): string | undefined {
 		const wx = state.intelPacket.weather.find((item) =>
