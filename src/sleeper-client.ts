@@ -10,14 +10,11 @@ import type {
 import {
 	applyWeatherToPlayers,
 	buildWeatherIntel,
-	ESPN_SCOREBOARD_URL,
 	loadEspnGames,
 	normalizeTeam,
 } from "./nfl-intel";
 
-export { ESPN_SCOREBOARD_URL };
-
-export const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
+const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
 
 export class SleeperRequestError extends Error {
 	readonly code: SleeperErrorCode;
@@ -37,9 +34,8 @@ export interface SleeperImportInput {
 	rosterId?: number;
 }
 
-export interface SleeperImportResult {
+interface SleeperImportResult {
 	week: number;
-	season: string;
 	roster: LeagueRoster;
 	injuries: InjuryReportIntel[];
 	weather: WeatherIntel[];
@@ -62,8 +58,6 @@ interface SleeperLeague {
 	league_id: string;
 	name?: string;
 	roster_positions?: string[];
-	season?: string;
-	scoring_settings?: { rec?: number };
 }
 
 interface SleeperRoster {
@@ -222,14 +216,13 @@ export async function importSleeperRoster(
 
 	return {
 		week,
-		season,
 		roster: mapped.roster,
 		injuries: mapped.injuries,
 		weather,
 	};
 }
 
-export function mapSleeperInjuryStatus(
+function mapSleeperInjuryStatus(
 	injury: string | null | undefined,
 ): FantasyPlayer["status"] {
 	switch ((injury ?? "").trim().toUpperCase()) {
@@ -251,7 +244,7 @@ export function mapSleeperInjuryStatus(
 	}
 }
 
-export function mapSleeperPosition(raw: string | undefined): Position {
+function mapSleeperPosition(raw: string | undefined): Position {
 	const pos = (raw ?? "").toUpperCase();
 	if (pos === "DEF" || pos === "DST") return "DST";
 	if (pos === "QB" || pos === "RB" || pos === "WR" || pos === "TE" || pos === "K") {
@@ -360,11 +353,9 @@ function mapLeagueRoster(args: {
 			source: {
 				provider: "sleeper",
 				username: args.username,
-				userId: args.user.user_id,
 				leagueId: args.league.league_id,
 				leagueName: args.league.name || args.league.league_id,
 				rosterId: args.roster.roster_id,
-				importedAt: Date.now(),
 				availableLeagues: args.availableLeagues,
 			},
 		},

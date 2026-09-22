@@ -18,15 +18,7 @@ export interface FantasyPlayer {
 	tags?: string[];
 }
 
-export type GrokDecisionAction =
-	| "START"
-	| "SIT"
-	| "HOLD"
-	| "ADD"
-	| "DROP"
-	| "TRADE_Y"
-	| "TRADE_N"
-	| "SMASH";
+export type GrokDecisionAction = "START" | "SIT";
 
 export type IntelFlag = "INJ" | "WX" | "NEWS" | "SPLIT" | "STALE";
 
@@ -43,26 +35,15 @@ export interface GrokRecommendation {
 
 export interface GrokDecisionResponse {
 	task: string;
-	wk: number;
 	recs: GrokRecommendation[];
 	tokensUsed: number;
 	legacyTokensEquivalent: number;
-	cacheHit: boolean;
-	timestamp: number;
 	model?: string;
 }
 
 export interface GrokApiErrorBody {
 	error: string;
 	code: "XAI_API_KEY_MISSING" | "XAI_REQUEST_FAILED" | "XAI_INVALID_RESPONSE";
-}
-
-export interface GrokStartSitVerdict {
-	act: GrokDecisionAction;
-	delta: number;
-	conf: number;
-	why: string;
-	flags: IntelFlag[];
 }
 
 export interface BeatReporterIntel {
@@ -74,7 +55,6 @@ export interface BeatReporterIntel {
 	playerId?: string;
 	team: string;
 	confidence: number;
-	impactLevel: "HIGH" | "MEDIUM" | "LOW";
 }
 
 export interface WeatherIntel {
@@ -98,7 +78,6 @@ export interface InjuryReportIntel {
 		thu: "DNP" | "LP" | "FP" | "-";
 		fri: "DNP" | "LP" | "FP" | "-";
 	};
-	handcuffId?: string;
 	handcuffName?: string;
 	confidence: number;
 }
@@ -129,11 +108,9 @@ export interface SleeperLeagueOption {
 export interface RosterImportMeta {
 	provider: "seed" | "sleeper";
 	username?: string;
-	userId?: string;
 	leagueId?: string;
 	leagueName?: string;
 	rosterId?: number;
-	importedAt?: number;
 	availableLeagues?: SleeperLeagueOption[];
 }
 

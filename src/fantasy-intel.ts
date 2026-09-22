@@ -183,7 +183,6 @@ export const INITIAL_INTEL: IntelCachePacket = {
 				thu: "DNP",
 				fri: "LP",
 			},
-			handcuffId: "p_charbonnet",
 			handcuffName: "Zach Charbonnet",
 			confidence: 0.72,
 		},
@@ -242,7 +241,6 @@ export const INITIAL_INTEL: IntelCachePacket = {
 			playerId: "p_kyren",
 			team: "LAR",
 			confidence: 0.82,
-			impactLevel: "HIGH",
 		},
 		{
 			id: "beat_2",
@@ -253,7 +251,6 @@ export const INITIAL_INTEL: IntelCachePacket = {
 			playerId: "p_jsn",
 			team: "SEA",
 			confidence: 0.9,
-			impactLevel: "HIGH",
 		},
 		{
 			id: "beat_3",
@@ -264,7 +261,6 @@ export const INITIAL_INTEL: IntelCachePacket = {
 			playerId: "p_charbonnet",
 			team: "SEA",
 			confidence: 0.85,
-			impactLevel: "HIGH",
 		},
 		{
 			id: "beat_4",
@@ -275,7 +271,6 @@ export const INITIAL_INTEL: IntelCachePacket = {
 			playerId: "p_waddle",
 			team: "MIA",
 			confidence: 0.79,
-			impactLevel: "MEDIUM",
 		},
 	],
 };
@@ -385,9 +380,3 @@ export function buildCommandCenterState(): CommandCenterState {
 		],
 	};
 }
-
-export {
-	DEFAULT_START_SIT_QUERY,
-	executeGrokDecision,
-	LEGACY_TOKENS_EQUIVALENT,
-} from "./grok-client";

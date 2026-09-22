@@ -866,7 +866,6 @@ export function FantasyCommandCenter() {
 										</div>
 										<p className="mt-2 text-[10px] font-mono text-neutral-500 dark:text-neutral-400">
 											xAI usage: {latestDecision.tokensUsed} tokens
-											{latestDecision.cacheHit ? " · cache" : ""}
 											{" · vs "}
 											{latestDecision.legacyTokensEquivalent} legacy
 										</p>

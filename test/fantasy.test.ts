@@ -2,16 +2,10 @@ import { env, runInDurableObject } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
 import { buildCommandCenterState } from "../src/fantasy-intel";
 import {
-	buildCsspPacket,
-	clipWhy,
 	executeGrokDecision,
-	extractTokenUsage,
 	GrokRequestError,
 	MissingXaiApiKeyError,
-	parseGrokVerdict,
 	recommendationMatchesPlayer,
-	resolvePlayer,
-	XAI_CHAT_COMPLETIONS_URL,
 } from "../src/grok-client";
 import type { WorkflowStatusDO } from "../worker/durable-object";
 
@@ -33,7 +27,7 @@ function mockXaiFetch(
 	overrides: {
 		status?: number;
 		body?: unknown;
-		usage?: typeof MOCK_USAGE | null;
+		usage?: Record<string, number> | null;
 	} = {},
 ): typeof fetch {
 	return async (input, init) => {
@@ -64,42 +58,64 @@ function mockXaiFetch(
 }
 
 describe("CSSP packet + Grok verdict parsing", () => {
-	it("builds a compact Kyren vs Charbonnet packet instead of a 16-player dump", () => {
-		const state = buildCommandCenterState();
-		const kyren = resolvePlayer(state, "p_kyren");
-		const charbonnet = resolvePlayer(state, "p_charbonnet");
-		expect(kyren && charbonnet).toBeTruthy();
+	it("builds a compact Kyren vs Charbonnet packet instead of a 16-player dump", async () => {
+		let compact = "";
+		await executeGrokDecision(buildCommandCenterState(), "p_kyren", "p_charbonnet", {
+			apiKey: "test-xai-key",
+			fetchImpl: async (input, init) => {
+				const payload = JSON.parse(String(init?.body)) as {
+					messages?: Array<{ content?: string }>;
+				};
+				compact = payload.messages?.[1]?.content ?? "";
+				return mockXaiFetch()(input, init);
+			},
+		});
+		expect(compact).toContain("WK:14");
+		expect(compact).toContain("Q: Williams vs Charbonnet");
+		expect(compact).toContain("INJ:");
+		expect(compact).toContain("WX:");
+		expect(compact).not.toContain("Ja'Marr Chase");
+		expect(compact).not.toContain("Josh Allen");
+		expect(compact.length).toBeLessThan(1800);
 
-		const packet = buildCsspPacket(state, kyren!, charbonnet!, false);
-		expect(packet).toContain("WK:14");
-		expect(packet).toContain("Q: Williams vs Charbonnet");
-		expect(packet).toContain("INJ:");
-		expect(packet).toContain("WX:");
-		expect(packet).not.toContain("Ja'Marr Chase");
-		expect(packet).not.toContain("Josh Allen");
-		expect(packet.length).toBeLessThan(1800);
-
-		const verbose = buildCsspPacket(state, kyren!, charbonnet!, true);
+		let verbose = "";
+		await executeGrokDecision(buildCommandCenterState(), "p_kyren", "p_charbonnet", {
+			apiKey: "test-xai-key",
+			useLegacy: true,
+			fetchImpl: async (input, init) => {
+				const payload = JSON.parse(String(init?.body)) as {
+					messages?: Array<{ content?: string }>;
+				};
+				verbose = payload.messages?.[1]?.content ?? "";
+				return mockXaiFetch()(input, init);
+			},
+		});
 		expect(verbose).toContain("Ja'Marr Chase");
-		expect(verbose.length).toBeGreaterThan(packet.length);
+		expect(verbose.length).toBeGreaterThan(compact.length);
 	});
 
-	it("parses structured Grok JSON, clips why to 12 words, and maps both players", () => {
-		const state = buildCommandCenterState();
-		const kyren = resolvePlayer(state, "p_kyren")!;
-		const charbonnet = resolvePlayer(state, "p_charbonnet")!;
-
-		const recs = parseGrokVerdict(
+	it("parses structured Grok JSON, clips why to 12 words, and maps both players", async () => {
+		const decision = await executeGrokDecision(
+			buildCommandCenterState(),
+			"p_kyren",
+			"p_charbonnet",
 			{
-				act: "SIT",
-				delta: -4.2,
-				conf: 0.81,
-				why: "Ankle DNP in 28mph Buffalo wind with extra leftover words here",
-				flags: ["INJ", "WX", "NOPE"],
+				apiKey: "test-xai-key",
+				fetchImpl: mockXaiFetch({
+					body: {
+						act: "SIT",
+						delta: -4.2,
+						conf: 0.81,
+						why: "Ankle DNP in 28mph Buffalo wind with extra leftover words here",
+						flags: ["INJ", "WX", "NOPE"],
+					},
+				}),
 			},
-			kyren,
-			charbonnet,
 		);
+		const recs = decision.recs;
+		const state = buildCommandCenterState();
+		const kyren = state.activeRoster.starters.find((p) => p.id === "p_kyren")!;
+		const charbonnet = state.activeRoster.bench.find((p) => p.id === "p_charbonnet")!;
 
 		expect(recs).toHaveLength(2);
 		expect(recs[0].id).toBe("Williams");
@@ -112,16 +128,49 @@ describe("CSSP packet + Grok verdict parsing", () => {
 		expect(recs[1].delta).toBe(4.2);
 		expect(recommendationMatchesPlayer(recs[0], kyren)).toBe(true);
 		expect(recommendationMatchesPlayer(recs[1], charbonnet)).toBe(true);
-		expect(clipWhy("one two three")).toBe("one two three");
 	});
 
-	it("reads actual token usage from prompt+completion when total is omitted", () => {
-		expect(extractTokenUsage(MOCK_USAGE)).toBe(209);
-		expect(
-			extractTokenUsage({ prompt_tokens: 100, completion_tokens: 40 }),
-		).toBe(140);
-		expect(extractTokenUsage({ input_tokens: 80, output_tokens: 12 })).toBe(92);
-		expect(() => extractTokenUsage(undefined)).toThrow(GrokRequestError);
+	it("reads actual token usage from prompt+completion when total is omitted", async () => {
+		const withTotal = await executeGrokDecision(
+			buildCommandCenterState(),
+			"p_kyren",
+			"p_charbonnet",
+			{ apiKey: "test-xai-key", fetchImpl: mockXaiFetch() },
+		);
+		expect(withTotal.tokensUsed).toBe(209);
+
+		const promptCompletion = await executeGrokDecision(
+			buildCommandCenterState(),
+			"p_kyren",
+			"p_charbonnet",
+			{
+				apiKey: "test-xai-key",
+				fetchImpl: mockXaiFetch({
+					usage: { prompt_tokens: 100, completion_tokens: 40 },
+				}),
+			},
+		);
+		expect(promptCompletion.tokensUsed).toBe(140);
+
+		const inputOutput = await executeGrokDecision(
+			buildCommandCenterState(),
+			"p_kyren",
+			"p_charbonnet",
+			{
+				apiKey: "test-xai-key",
+				fetchImpl: mockXaiFetch({
+					usage: { input_tokens: 80, output_tokens: 12 },
+				}),
+			},
+		);
+		expect(inputOutput.tokensUsed).toBe(92);
+
+		await expect(
+			executeGrokDecision(buildCommandCenterState(), "p_kyren", "p_charbonnet", {
+				apiKey: "test-xai-key",
+				fetchImpl: mockXaiFetch({ usage: null }),
+			}),
+		).rejects.toBeInstanceOf(GrokRequestError);
 	});
 });
 
@@ -149,7 +198,6 @@ describe("executeGrokDecision (mocked xAI)", () => {
 		);
 
 		expect(decision.task).toBe("WK14_DECISION");
-		expect(decision.cacheHit).toBe(false);
 		expect(decision.tokensUsed).toBe(209);
 		expect(decision.tokensUsed).not.toBe(380);
 		expect(decision.tokensUsed).not.toBe(4250);
@@ -211,7 +259,6 @@ describe("WorkflowStatusDO Grok evaluate path", () => {
 		expect(decision.tokensUsed).toBe(209);
 		expect(decision.recs).toHaveLength(2);
 		expect(decision.recs[0].act).toBe("SIT");
-		expect(decision.cacheHit).toBe(false);
 
 		const state = await stub.getFantasyState();
 		expect(state.lastDecision?.tokensUsed).toBe(209);
@@ -263,7 +310,7 @@ describe("xAI request shape", () => {
 			},
 		);
 
-		expect(capturedUrl).toBe(XAI_CHAT_COMPLETIONS_URL);
+		expect(capturedUrl).toBe("https://api.x.ai/v1/chat/completions");
 		expect(capturedBody.model).toBe("grok-4");
 		expect(capturedBody.response_format?.type).toBe("json_schema");
 		expect(capturedBody.response_format?.json_schema?.name).toBe(

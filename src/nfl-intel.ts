@@ -1,11 +1,11 @@
 import type { FantasyPlayer, WeatherIntel } from "./types/fantasy";
 
-export const ESPN_SCOREBOARD_URL =
+const ESPN_SCOREBOARD_URL =
 	"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 
-export type WeatherTag = WeatherIntel["weatherTag"];
+type WeatherTag = WeatherIntel["weatherTag"];
 
-export interface EspnGame {
+interface EspnGame {
 	home: string;
 	away: string;
 	indoor: boolean;
@@ -75,13 +75,13 @@ export function normalizeTeam(abbr: string): string {
 	return team;
 }
 
-export function parseWindMph(text: string | null | undefined): number {
+function parseWindMph(text: string | null | undefined): number {
 	if (!text) return 0;
 	const match = String(text).match(/(\d+)/);
 	return match ? Number(match[1]) : 0;
 }
 
-export function tagWeather(input: {
+function tagWeather(input: {
 	indoor: boolean;
 	windMph: number;
 	gustMph: number;
@@ -102,7 +102,7 @@ export function tagWeather(input: {
 	return "NONE";
 }
 
-export function weatherLine(wx: WeatherIntel): string {
+function weatherLine(wx: WeatherIntel): string {
 	if (wx.isDome) return "Dome";
 	if (wx.weatherTag === "NONE") {
 		return `${wx.tempF}F ${wx.location}`;

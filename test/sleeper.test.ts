@@ -6,11 +6,10 @@ import {
 } from "../src/fantasy-intel";
 import {
 	importSleeperRoster,
-	mapSleeperInjuryStatus,
-	mapSleeperPosition,
 	SleeperRequestError,
-	SLEEPER_API_BASE,
 } from "../src/sleeper-client";
+
+const SLEEPER_API_BASE = "https://api.sleeper.app/v1";
 import type { WorkflowStatusDO } from "../worker/durable-object";
 
 const PLAYERS = {
@@ -266,15 +265,6 @@ function mockSleeperFetch(): typeof fetch {
 }
 
 describe("Sleeper mapping helpers", () => {
-	it("maps injury and position codes", () => {
-		expect(mapSleeperInjuryStatus("Questionable")).toBe("QUESTIONABLE");
-		expect(mapSleeperInjuryStatus("OUT")).toBe("OUT");
-		expect(mapSleeperInjuryStatus(null)).toBe("ACTIVE");
-		expect(mapSleeperPosition("DEF")).toBe("DST");
-		expect(mapSleeperPosition("RB")).toBe("RB");
-		expect(mapSleeperPosition("SUPER_FLEX")).toBe("FLEX");
-	});
-
 	it("keeps Kyren vs Charbonnet on the seed roster", () => {
 		const matchup = pickDefaultMatchup(buildCommandCenterState().activeRoster);
 		expect(matchup.starterId).toBe("p_kyren");

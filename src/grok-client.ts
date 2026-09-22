@@ -4,31 +4,17 @@ import type {
 	GrokDecisionAction,
 	GrokDecisionResponse,
 	GrokRecommendation,
-	GrokStartSitVerdict,
 	IntelFlag,
 } from "./types/fantasy";
 
-export const XAI_CHAT_COMPLETIONS_URL = "https://api.x.ai/v1/chat/completions";
-export const GROK_START_SIT_MODEL = "grok-4";
-export const LEGACY_TOKENS_EQUIVALENT = 4250;
-export const DEFAULT_START_SIT_QUERY = {
-	playerAId: "p_kyren",
-	playerBId: "p_charbonnet",
-} as const;
+const XAI_CHAT_COMPLETIONS_URL = "https://api.x.ai/v1/chat/completions";
+const GROK_START_SIT_MODEL = "grok-4";
+const LEGACY_TOKENS_EQUIVALENT = 4250;
 
-const ACTIONS: GrokDecisionAction[] = [
-	"START",
-	"SIT",
-	"HOLD",
-	"ADD",
-	"DROP",
-	"TRADE_Y",
-	"TRADE_N",
-	"SMASH",
-];
+const ACTIONS: GrokDecisionAction[] = ["START", "SIT"];
 const FLAGS: IntelFlag[] = ["INJ", "WX", "NEWS", "SPLIT", "STALE"];
 
-export const START_SIT_JSON_SCHEMA = {
+const START_SIT_JSON_SCHEMA = {
 	name: "start_sit_verdict",
 	strict: true,
 	schema: {
@@ -90,7 +76,7 @@ export class GrokRequestError extends Error {
 	}
 }
 
-export interface ExecuteGrokDecisionOptions {
+interface ExecuteGrokDecisionOptions {
 	apiKey?: string;
 	useLegacy?: boolean;
 	fetchImpl?: typeof fetch;
@@ -111,7 +97,7 @@ interface XaiChatCompletion {
 	model?: string;
 }
 
-export function resolvePlayer(
+function resolvePlayer(
 	state: CommandCenterState,
 	token: string,
 ): FantasyPlayer | undefined {
@@ -130,7 +116,7 @@ export function resolvePlayer(
 	);
 }
 
-export function recId(player: FantasyPlayer): string {
+function recId(player: FantasyPlayer): string {
 	const parts = player.name.trim().split(/\s+/);
 	if (parts.length === 1) {
 		return parts[0];
@@ -142,7 +128,7 @@ export function recId(player: FantasyPlayer): string {
 	return parts[0];
 }
 
-export function clipWhy(why: string, maxWords = 12): string {
+function clipWhy(why: string, maxWords = 12): string {
 	const words = why.trim().split(/\s+/).filter(Boolean);
 	if (words.length <= maxWords) {
 		return words.join(" ");
@@ -150,7 +136,7 @@ export function clipWhy(why: string, maxWords = 12): string {
 	return words.slice(0, maxWords).join(" ");
 }
 
-export function extractTokenUsage(usage: XaiUsage | undefined): number {
+function extractTokenUsage(usage: XaiUsage | undefined): number {
 	if (!usage) {
 		throw new GrokRequestError(
 			"xAI response did not include token usage.",
@@ -194,7 +180,6 @@ function relatedIntel(
 ): string[] {
 	const ids = new Set(players.map((p) => p.id));
 	const teams = new Set(players.map((p) => p.team));
-	const games = new Set(players.map((p) => `${p.team} ${p.opp}`));
 	const lines: string[] = [];
 
 	for (const inj of state.intelPacket.injuries) {
@@ -206,14 +191,7 @@ function relatedIntel(
 	}
 
 	for (const wx of state.intelPacket.weather) {
-		const relevant = [...games].some((g) => {
-			const [team, , opp] = g.split(" ");
-			return (
-				wx.game.includes(team) &&
-				(wx.game.includes(opp) || players.some((p) => wx.game.includes(p.team)))
-			);
-		});
-		if (!relevant && !players.some((p) => wx.game.includes(p.team))) continue;
+		if (!players.some((p) => wx.game.includes(p.team))) continue;
 		const dome = wx.isDome ? "DOME" : `wind${wx.windMph} gust${wx.gustMph}`;
 		lines.push(
 			`- WX: ${wx.game} ${dome} ${wx.tempF}F ${wx.weatherTag}`,
@@ -235,7 +213,7 @@ function relatedIntel(
 	return lines;
 }
 
-export function buildCsspPacket(
+function buildCsspPacket(
 	state: CommandCenterState,
 	playerA: FantasyPlayer,
 	playerB: FantasyPlayer,
@@ -273,7 +251,7 @@ export function buildCsspPacket(
 
 	const intel = relatedIntel(state, [playerA, playerB]);
 	return [
-		`WK:${state.selectedWeek} PPR:0.5 LEAGUE:12`,
+		`WK:${state.selectedWeek}`,
 		`Q: ${recId(playerA)} vs ${recId(playerB)}`,
 		`A: ${playerLine(playerA)}`,
 		`B: ${playerLine(playerB)}`,
@@ -284,25 +262,13 @@ export function buildCsspPacket(
 }
 
 function parseJsonContent(content: string): unknown {
-	const trimmed = content.trim();
 	try {
-		return JSON.parse(trimmed);
+		return JSON.parse(content.trim());
 	} catch {
-		const match = trimmed.match(/\{[\s\S]*\}/);
-		if (!match) {
-			throw new GrokRequestError(
-				"Grok did not return JSON.",
-				"XAI_INVALID_RESPONSE",
-			);
-		}
-		try {
-			return JSON.parse(match[0]);
-		} catch {
-			throw new GrokRequestError(
-				"Grok JSON verdict could not be parsed.",
-				"XAI_INVALID_RESPONSE",
-			);
-		}
+		throw new GrokRequestError(
+			"Grok did not return JSON.",
+			"XAI_INVALID_RESPONSE",
+		);
 	}
 }
 
@@ -326,16 +292,10 @@ function asFlags(value: unknown): IntelFlag[] {
 }
 
 function inverseAction(act: GrokDecisionAction): GrokDecisionAction {
-	if (act === "START" || act === "SMASH" || act === "ADD") {
-		return "SIT";
-	}
-	if (act === "SIT" || act === "DROP") {
-		return "START";
-	}
-	return "HOLD";
+	return act === "START" ? "SIT" : "START";
 }
 
-export function parseGrokVerdict(
+function parseGrokVerdict(
 	payload: unknown,
 	playerA: FantasyPlayer,
 	playerB: FantasyPlayer,
@@ -353,30 +313,7 @@ export function parseGrokVerdict(
 		conf?: unknown;
 		why?: unknown;
 		flags?: unknown;
-		recs?: unknown;
 	};
-
-	if (Array.isArray(body.recs) && body.recs.length > 0) {
-		return body.recs.map((raw) => {
-			const rec = raw as Partial<GrokRecommendation>;
-			if (typeof rec.id !== "string" || rec.delta === undefined) {
-				throw new GrokRequestError(
-					"Grok recs were missing required fields.",
-					"XAI_INVALID_RESPONSE",
-				);
-			}
-			return {
-				id: rec.id,
-				act: asAction(rec.act),
-				vs: typeof rec.vs === "string" ? rec.vs : "",
-				delta: Number(rec.delta),
-				conf: Number(rec.conf ?? 0),
-				why: clipWhy(String(rec.why ?? "")),
-				src: rec.src ?? "grok",
-				flags: asFlags(rec.flags),
-			};
-		});
-	}
 
 	if (body.act === undefined || body.delta === undefined || body.conf === undefined) {
 		throw new GrokRequestError(
@@ -385,34 +322,32 @@ export function parseGrokVerdict(
 		);
 	}
 
-	const verdict: GrokStartSitVerdict = {
-		act: asAction(body.act),
-		delta: Number(body.delta),
-		conf: Number(body.conf),
-		why: clipWhy(String(body.why ?? "")),
-		flags: asFlags(body.flags),
-	};
+	const act = asAction(body.act);
+	const delta = Number(body.delta);
+	const conf = Number(body.conf);
+	const why = clipWhy(String(body.why ?? ""));
+	const flags = asFlags(body.flags);
 
 	return [
 		{
 			id: recId(playerA),
-			act: verdict.act,
+			act,
 			vs: recId(playerB),
-			delta: verdict.delta,
-			conf: verdict.conf,
-			why: verdict.why,
+			delta,
+			conf,
+			why,
 			src: "grok",
-			flags: verdict.flags,
+			flags,
 		},
 		{
 			id: recId(playerB),
-			act: inverseAction(verdict.act),
+			act: inverseAction(act),
 			vs: recId(playerA),
-			delta: Number((-verdict.delta).toFixed(2)),
-			conf: verdict.conf,
-			why: verdict.why,
+			delta: Number((-delta).toFixed(2)),
+			conf,
+			why,
 			src: "grok",
-			flags: verdict.flags,
+			flags,
 		},
 	];
 }
@@ -495,12 +430,9 @@ export async function executeGrokDecision(
 
 	return {
 		task: `WK${state.selectedWeek}_DECISION`,
-		wk: state.selectedWeek,
 		recs,
 		tokensUsed,
 		legacyTokensEquivalent: LEGACY_TOKENS_EQUIVALENT,
-		cacheHit: false,
-		timestamp: Date.now(),
 		model: payload.model ?? model,
 	};
 }
