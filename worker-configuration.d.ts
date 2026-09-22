@@ -3,7 +3,6 @@
 // Runtime types generated with workerd@1.20260826.1 2025-10-08 
 interface __BaseEnv_Env {
 	WORKFLOW_STATUS: DurableObjectNamespace<import("./worker/index").WorkflowStatusDO>;
-	MY_WORKFLOW: Workflow<Parameters<import("./worker/index").MyWorkflow['run']>[0]['payload']>;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {

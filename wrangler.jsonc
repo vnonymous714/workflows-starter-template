@@ -15,18 +15,6 @@
 		"enabled": true
 	},
 	/**
-	 * Workflows
-	 * Define Workflows to orchestrate multi-step processes
-	 * https://developers.cloudflare.com/workflows/
-	 */
-	"workflows": [
-		{
-			"name": "my-workflow",
-			"binding": "MY_WORKFLOW",
-			"class_name": "MyWorkflow"
-		}
-	],
-	/**
 	 * Durable Objects
 	 * Used for WebSocket state management and real-time updates
 	 * https://developers.cloudflare.com/durable-objects/

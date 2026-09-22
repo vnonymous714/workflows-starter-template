@@ -23,11 +23,3 @@
 		min-height: 100vh;
 	}
 }
-
-@utility ring-glass {
-	@apply ring-1 ring-black/5 dark:ring-white/10;
-}
-
-@utility shadow-float {
-	@apply shadow-lg shadow-black/5 dark:shadow-black/20;
-}
