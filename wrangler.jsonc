@@ -4,7 +4,7 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "workflows-starter-template",
+	"name": "fantasy-command-center",
 	"main": "worker/index.ts",
 	"compatibility_date": "2025-10-08",
 	"assets": {

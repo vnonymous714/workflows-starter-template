@@ -2,6 +2,3 @@
 # Copy this file to `.dev.vars` (gitignored) before `npm run dev`.
 # Production / preview: npx wrangler secret put XAI_API_KEY
 XAI_API_KEY=
-
-# Optional. Sleeper import is done from the Command Center UI (no secret).
-# SLEEPER_USERNAME=

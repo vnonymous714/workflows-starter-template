@@ -1,21 +1,6 @@
 {
-	"name": "workflows-starter-template",
-	"description": "Interactive starter template demonstrating Cloudflare Workflows with real-time status updates",
-	"cloudflare": {
-		"label": "Workflows Starter",
-		"products": [
-			"Workers",
-			"Workflows",
-			"Durable Objects"
-		],
-		"categories": [
-			"starter"
-		],
-		"publish": true,
-		"preview_image_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/4380d39a-b907-437c-e784-500fcc10cb00/preview",
-		"preview_icon_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/6d6e9a49-5c10-4ef6-bfa8-b6577a656300/public",
-		"docs_url": "https://developers.cloudflare.com/workflows/"
-	},
+	"name": "fantasy-command-center",
+	"description": "Fantasy Command Center: Sleeper roster import, live Grok start/sit, and Durable Object state",
 	"dependencies": {
 		"react": "19.2.1",
 		"react-dom": "19.2.1"
@@ -45,7 +30,7 @@
 	"scripts": {
 		"build": "tsc -b && vite build",
 		"cf-typegen": "wrangler types",
-		"check": "tsc && wrangler deploy --dry-run",
+		"check": "tsc -b && npm test",
 		"deploy": "npm run build && wrangler deploy",
 		"dev": "vite",
 		"lint": "eslint .",
