@@ -221,7 +221,7 @@ describe("WorkflowStatusDO Grok evaluate path", () => {
 		expect(persisted?.delta).toBeGreaterThan(0);
 	});
 
-	it("still swaps roster and refreshes intel without Grok", async () => {
+	it("still swaps roster and no-ops intel refresh on the seed roster", async () => {
 		const doId = env.WORKFLOW_STATUS.idFromName("test_fantasy_roster");
 		const stub = env.WORKFLOW_STATUS.get(doId);
 
@@ -229,14 +229,18 @@ describe("WorkflowStatusDO Grok evaluate path", () => {
 		expect(state.selectedWeek).toBe(14);
 		expect(state.activeRoster.starters.length).toBeGreaterThan(0);
 		expect(state.intelPacket.beatReports.length).toBeGreaterThan(0);
+		expect(state.activeRoster.source?.provider).toBe("seed");
 
 		const swappedState = await stub.swapRoster("p_kyren", "p_charbonnet");
 		const starterNames = swappedState.activeRoster.starters.map((s) => s.name);
 		expect(starterNames).toContain("Zach Charbonnet");
 
+		const beforeRefresh = await stub.getFantasyState();
 		const refreshedState = await stub.refreshIntel();
-		expect(refreshedState.intelPacket.fresh).toBe(true);
-		expect(refreshedState.liveAlerts[0].type).toBe("GROK");
+		expect(refreshedState.intelPacket.fresh).toBe(beforeRefresh.intelPacket.fresh);
+		expect(refreshedState.intelPacket.hash).toBe(beforeRefresh.intelPacket.hash);
+		expect(refreshedState.liveAlerts).toEqual(beforeRefresh.liveAlerts);
+		expect(refreshedState.liveAlerts[0]?.message).not.toContain("20 handles");
 	});
 });
 

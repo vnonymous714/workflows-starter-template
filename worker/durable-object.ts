@@ -18,53 +18,24 @@ import {
 } from "../src/sleeper-client";
 
 /**
- * WorkflowStatusDO - Durable Object for managing workflow and fantasy command center state.
+ * WorkflowStatusDO - Durable Object for Fantasy Command Center state.
  *
  * Responsibilities:
- * - Accept and manage WebSocket connections using hibernation API
- * - Track step statuses for workflow instances
- * - Persist and manage fantasy football league roster and cached Grok beat intel
- * - Compute token-optimized Grok decisions and broadcast updates to clients
+ * - Accept WebSocket connections (hibernation API) for cron intel refresh
+ * - Persist league roster and cached Grok beat intel
+ * - Compute token-optimized Grok decisions
  */
 export class WorkflowStatusDO extends DurableObject {
-	private stepStatuses: Map<string, string>;
-	private currentStep: string | null;
-	private workflowStatus: "running" | "completed" | "error";
 	private fantasyState: CommandCenterState;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
 
-		this.stepStatuses = new Map();
-		this.currentStep = null;
-		this.workflowStatus = "running";
 		this.fantasyState = buildCommandCenterState();
 
-		// Load state from durable storage to survive hibernation/eviction
 		ctx.blockConcurrencyWhile(async () => {
-			const storedStatuses =
-				await ctx.storage.get<Record<string, string>>("stepStatuses");
-			const storedCurrent = await ctx.storage.get<string | null>("currentStep");
-			const storedWorkflowStatus = await ctx.storage.get<
-				"running" | "completed" | "error"
-			>("workflowStatus");
 			const storedFantasy =
 				await ctx.storage.get<CommandCenterState>("fantasyState");
-
-			if (storedStatuses) {
-				this.stepStatuses = new Map(Object.entries(storedStatuses));
-			} else {
-				const steps = [
-					"process data",
-					"wait 2 seconds",
-					"wait for approval",
-					"final",
-				];
-				steps.forEach((s) => this.stepStatuses.set(s, "pending"));
-			}
-
-			this.currentStep = storedCurrent ?? null;
-			this.workflowStatus = storedWorkflowStatus ?? "running";
 			if (storedFantasy) {
 				this.fantasyState = storedFantasy;
 			}
@@ -78,12 +49,7 @@ export class WorkflowStatusDO extends DurableObject {
 			const pair = new WebSocketPair();
 			const [client, server] = Object.values(pair);
 
-			// Use hibernation API - acceptWebSocket allows the DO to hibernate
 			this.ctx.acceptWebSocket(server);
-
-			// Send current workflow state and fantasy state immediately
-			server.send(JSON.stringify(this.getStateMessage()));
-			server.send(JSON.stringify(this.getFantasyStateMessage()));
 
 			return new Response(null, { status: 101, webSocket: client });
 		}
@@ -137,37 +103,8 @@ export class WorkflowStatusDO extends DurableObject {
 		return new Response("Expected WebSocket or API route", { status: 400 });
 	}
 
-	/**
-	 * RPC method called by the workflow to update step status
-	 */
-	async updateStep(stepName: string, status: string): Promise<void> {
-		this.stepStatuses.set(stepName, status);
+	async updateStep(_stepName: string, _status: string): Promise<void> {}
 
-		if (status === "running" || status === "waiting") {
-			this.currentStep = stepName;
-		}
-
-		const allCompleted = Array.from(this.stepStatuses.values()).every(
-			(s) => s === "completed",
-		);
-		if (allCompleted) {
-			this.workflowStatus = "completed";
-			this.currentStep = null;
-		}
-
-		await this.ctx.storage.put(
-			"stepStatuses",
-			Object.fromEntries(this.stepStatuses),
-		);
-		await this.ctx.storage.put("currentStep", this.currentStep);
-		await this.ctx.storage.put("workflowStatus", this.workflowStatus);
-
-		this.broadcast(this.getStateMessage());
-	}
-
-	/**
-	 * Fantasy Command Center RPC Methods
-	 */
 	async getFantasyState(): Promise<CommandCenterState> {
 		return this.fantasyState;
 	}
@@ -199,7 +136,6 @@ export class WorkflowStatusDO extends DurableObject {
 		this.fantasyState.lastDecision = decision;
 
 		await this.ctx.storage.put("fantasyState", this.fantasyState);
-		this.broadcast(this.getFantasyStateMessage());
 
 		return decision;
 	}
@@ -245,68 +181,43 @@ export class WorkflowStatusDO extends DurableObject {
 		fetchImpl?: typeof fetch;
 	}): Promise<CommandCenterState> {
 		const source = this.fantasyState.activeRoster.source;
-		if (source?.provider === "sleeper" && source.username) {
-			try {
-				const state = await this.importRoster(
-					{
-						username: source.username,
-						leagueId: source.leagueId,
-						rosterId: source.rosterId,
-					},
-					sleeper,
-				);
-				if (state.liveAlerts[0]) {
-					state.liveAlerts[0].message = `Re-synced ${state.activeRoster.teamName} from Sleeper (@${source.username}).`;
-				}
-				await this.ctx.storage.put("fantasyState", this.fantasyState);
-				this.broadcast(this.getFantasyStateMessage());
-				return state;
-			} catch (error) {
-				this.fantasyState.liveAlerts.unshift({
-					id: `alt_${Date.now()}`,
-					time: new Date().toLocaleTimeString("en-US", {
-						hour: "2-digit",
-						minute: "2-digit",
-					}),
-					type: "GROK",
-					message:
-						error instanceof Error
-							? `Sleeper re-sync failed: ${error.message}`
-							: "Sleeper re-sync failed.",
-					severity: "danger",
-				});
-				await this.ctx.storage.put("fantasyState", this.fantasyState);
-				this.broadcast(this.getFantasyStateMessage());
-				return this.fantasyState;
-			}
+		if (source?.provider !== "sleeper" || !source.username) {
+			return this.fantasyState;
 		}
 
-		this.fantasyState.intelPacket.asOf = new Date().toLocaleTimeString(
-			"en-US",
-			{
-				hour: "2-digit",
-				minute: "2-digit",
-				timeZoneName: "short",
-			},
-		);
-		this.fantasyState.intelPacket.fresh = true;
-		this.fantasyState.intelPacket.hash = `intel_wk${this.fantasyState.selectedWeek}_${Date.now().toString(16).slice(-6)}`;
-
-		// Add an alert
-		this.fantasyState.liveAlerts.unshift({
-			id: `alt_${Date.now()}`,
-			time: new Date().toLocaleTimeString("en-US", {
-				hour: "2-digit",
-				minute: "2-digit",
-			}),
-			type: "GROK",
-			message: "Grok Beat Intel refresh complete: 20 handles polled, cache verified fresh.",
-			severity: "success",
-		});
-
-		await this.ctx.storage.put("fantasyState", this.fantasyState);
-		this.broadcast(this.getFantasyStateMessage());
-		return this.fantasyState;
+		try {
+			const state = await this.importRoster(
+				{
+					username: source.username,
+					leagueId: source.leagueId,
+					rosterId: source.rosterId,
+				},
+				sleeper,
+			);
+			if (state.liveAlerts[0]) {
+				state.liveAlerts[0].message = `Re-synced ${state.activeRoster.teamName} from Sleeper (@${source.username}).`;
+			}
+			await this.ctx.storage.put("fantasyState", this.fantasyState);
+			this.broadcastFantasyState();
+			return state;
+		} catch (error) {
+			this.fantasyState.liveAlerts.unshift({
+				id: `alt_${Date.now()}`,
+				time: new Date().toLocaleTimeString("en-US", {
+					hour: "2-digit",
+					minute: "2-digit",
+				}),
+				type: "GROK",
+				message:
+					error instanceof Error
+						? `Sleeper re-sync failed: ${error.message}`
+						: "Sleeper re-sync failed.",
+				severity: "danger",
+			});
+			await this.ctx.storage.put("fantasyState", this.fantasyState);
+			this.broadcastFantasyState();
+			return this.fantasyState;
+		}
 	}
 
 	async importRoster(
@@ -366,7 +277,6 @@ export class WorkflowStatusDO extends DurableObject {
 		}
 
 		await this.ctx.storage.put("fantasyState", this.fantasyState);
-		this.broadcast(this.getFantasyStateMessage());
 		return this.fantasyState;
 	}
 
@@ -385,7 +295,6 @@ export class WorkflowStatusDO extends DurableObject {
 			const starter = this.fantasyState.activeRoster.starters[starterIdx];
 			const bench = this.fantasyState.activeRoster.bench[benchIdx];
 
-			// Swap
 			this.fantasyState.activeRoster.starters[starterIdx] = {
 				...bench,
 				pos: starter.pos,
@@ -407,35 +316,11 @@ export class WorkflowStatusDO extends DurableObject {
 			});
 
 			await this.ctx.storage.put("fantasyState", this.fantasyState);
-			this.broadcast(this.getFantasyStateMessage());
 		}
 
 		return this.fantasyState;
 	}
 
-	/**
-	 * WebSocket message handler (hibernation API)
-	 */
-	async webSocketMessage(ws: WebSocket, message: string): Promise<void> {
-		try {
-			const data = JSON.parse(message);
-			if (data.type === "ping") {
-				ws.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
-				return;
-			}
-			if (data.type === "get_fantasy_state") {
-				ws.send(JSON.stringify(this.getFantasyStateMessage()));
-				return;
-			}
-		} catch {
-			// fall back to default workflow state
-		}
-		ws.send(JSON.stringify(this.getStateMessage()));
-	}
-
-	/**
-	 * WebSocket close handler (hibernation API)
-	 */
 	async webSocketClose(
 		ws: WebSocket,
 		code: number,
@@ -445,12 +330,13 @@ export class WorkflowStatusDO extends DurableObject {
 		ws.close(code, reason);
 	}
 
-	/**
-	 * Broadcast a message to all connected WebSocket clients
-	 */
-	private broadcast(message: object): void {
+	private broadcastFantasyState(): void {
 		const sockets = this.ctx.getWebSockets();
-		const json = JSON.stringify(message);
+		const json = JSON.stringify({
+			type: "fantasy_update",
+			payload: this.fantasyState,
+			timestamp: Date.now(),
+		});
 
 		for (const socket of sockets) {
 			try {
@@ -459,29 +345,5 @@ export class WorkflowStatusDO extends DurableObject {
 				// Ignore errors for disconnected sockets
 			}
 		}
-	}
-
-	/**
-	 * Get the current workflow state as a message object
-	 */
-	private getStateMessage(): object {
-		return {
-			type: "workflow_update",
-			currentStep: this.currentStep,
-			stepStatuses: Object.fromEntries(this.stepStatuses),
-			workflowStatus: this.workflowStatus,
-			timestamp: Date.now(),
-		};
-	}
-
-	/**
-	 * Get the current fantasy command center state as a message object
-	 */
-	private getFantasyStateMessage(): object {
-		return {
-			type: "fantasy_update",
-			payload: this.fantasyState,
-			timestamp: Date.now(),
-		};
 	}
 }
