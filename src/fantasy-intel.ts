@@ -2,7 +2,6 @@ import type {
 	CommandCenterState,
 	IntelCachePacket,
 	LeagueRoster,
-	TokenMetrics,
 } from "./types/fantasy";
 
 export function pickDefaultMatchup(roster: LeagueRoster): {
@@ -280,37 +279,6 @@ export const INITIAL_INTEL: IntelCachePacket = {
 	],
 };
 
-export const INITIAL_TOKEN_METRICS: TokenMetrics[] = [
-	{
-		queryType: "Start/Sit Matchup Query",
-		legacyTokens: 4200,
-		optimizedTokens: 380,
-		savingsPercent: 90.9,
-		latencyReductionMs: 1450,
-	},
-	{
-		queryType: "Waiver Wire & FAAB Scan",
-		legacyTokens: 6800,
-		optimizedTokens: 750,
-		savingsPercent: 88.9,
-		latencyReductionMs: 2100,
-	},
-	{
-		queryType: "Trade Impact Valuation",
-		legacyTokens: 5400,
-		optimizedTokens: 640,
-		savingsPercent: 88.1,
-		latencyReductionMs: 1800,
-	},
-	{
-		queryType: "In-Game Injury Pivot Check",
-		legacyTokens: 3100,
-		optimizedTokens: 290,
-		savingsPercent: 90.6,
-		latencyReductionMs: 950,
-	},
-];
-
 export function buildCommandCenterState(): CommandCenterState {
 	return {
 		selectedWeek: 14,
@@ -358,7 +326,6 @@ export function buildCommandCenterState(): CommandCenterState {
 				flags: ["NEWS"],
 			},
 		],
-		tokenMetrics: INITIAL_TOKEN_METRICS,
 		lastDecision: null,
 		liveAlerts: [
 			{

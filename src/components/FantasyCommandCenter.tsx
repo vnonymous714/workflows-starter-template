@@ -4,22 +4,15 @@ import type {
 	FantasyPlayer,
 	GrokDecisionResponse,
 	GrokRecommendation,
-	BeatReporterIntel,
-	TokenMetrics,
-	WeatherIntel,
 } from "../types/fantasy";
 import {
 	INITIAL_ROSTER,
 	INITIAL_INTEL,
-	INITIAL_TOKEN_METRICS,
 	pickDefaultMatchup,
 } from "../fantasy-intel";
 import { recommendationMatchesPlayer } from "../grok-client";
 
 export function FantasyCommandCenter() {
-	const [activeTab, setActiveTab] = useState<
-		"lineup" | "grok" | "token" | "weather"
-	>("lineup");
 	const [selectedStarter, setSelectedStarter] = useState<string>("p_kyren");
 	const [selectedBench, setSelectedBench] = useState<string>("p_charbonnet");
 	const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
@@ -29,8 +22,6 @@ export function FantasyCommandCenter() {
 		useState<GrokDecisionResponse | null>(null);
 	const [evaluateError, setEvaluateError] = useState<string | null>(null);
 	const [wsConnected, setWsConnected] = useState<boolean>(false);
-	const [useLegacySimulation, setUseLegacySimulation] =
-		useState<boolean>(false);
 	const [debug] = useState(() =>
 		new URLSearchParams(window.location.search).has("debug"),
 	);
@@ -85,7 +76,6 @@ export function FantasyCommandCenter() {
 				flags: ["NEWS"],
 			},
 		],
-		tokenMetrics: INITIAL_TOKEN_METRICS,
 		lastDecision: null,
 		liveAlerts: [
 			{
@@ -226,7 +216,6 @@ export function FantasyCommandCenter() {
 				body: JSON.stringify({
 					playerA: selectedStarter,
 					playerB: selectedBench,
-					useLegacy: useLegacySimulation,
 				}),
 			});
 
@@ -420,6 +409,19 @@ export function FantasyCommandCenter() {
 						Open Canvas Architecture
 					</a>
 					)}
+
+					<span
+						className={`w-2 h-2 rounded-full ${
+							wsConnected
+								? "bg-emerald-500 animate-pulse"
+								: "bg-neutral-400"
+						}`}
+					/>
+					<span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+						{wsConnected
+							? "Durable Object live"
+							: "Connecting to Durable Object…"}
+					</span>
 				</div>
 			</div>
 
@@ -475,74 +477,7 @@ export function FantasyCommandCenter() {
 				)}
 			</div>
 
-			{/* Navigation Tabs */}
-			<div className="px-5 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/30 dark:bg-neutral-900/30 flex items-center justify-between">
-				<div className="flex gap-4">
-					<button
-						onClick={() => setActiveTab("lineup")}
-						className={`py-2.5 text-xs font-medium border-b-2 transition-colors ${
-							activeTab === "lineup"
-								? "border-emerald-600 text-emerald-600 dark:text-emerald-400 dark:border-emerald-400"
-								: "border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200"
-						}`}
-					>
-						Sunday HUD
-					</button>
-					{debug && (
-						<>
-					<button
-						onClick={() => setActiveTab("grok")}
-						className={`py-2.5 text-xs font-medium border-b-2 transition-colors ${
-							activeTab === "grok"
-								? "border-emerald-600 text-emerald-600 dark:text-emerald-400 dark:border-emerald-400"
-								: "border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200"
-						}`}
-					>
-						Grok Beat Radar
-					</button>
-					<button
-						onClick={() => setActiveTab("token")}
-						className={`py-2.5 text-xs font-medium border-b-2 transition-colors ${
-							activeTab === "token"
-								? "border-emerald-600 text-emerald-600 dark:text-emerald-400 dark:border-emerald-400"
-								: "border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200"
-						}`}
-					>
-						Token Inspector
-					</button>
-					<button
-						onClick={() => setActiveTab("weather")}
-						className={`py-2.5 text-xs font-medium border-b-2 transition-colors ${
-							activeTab === "weather"
-								? "border-emerald-600 text-emerald-600 dark:text-emerald-400 dark:border-emerald-400"
-								: "border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200"
-						}`}
-					>
-						Weather detail
-					</button>
-						</>
-					)}
-				</div>
-
-				<div className="flex items-center gap-2">
-					<span
-						className={`w-2 h-2 rounded-full ${
-							wsConnected
-								? "bg-emerald-500 animate-pulse"
-								: "bg-neutral-400"
-						}`}
-					/>
-					<span className="text-[11px] text-neutral-500 dark:text-neutral-400">
-						{wsConnected
-							? "Durable Object live"
-							: "Connecting to Durable Object…"}
-					</span>
-				</div>
-			</div>
-
-			{/* Main Tab Views */}
 			<div className="flex-1 overflow-y-auto p-5">
-				{activeTab === "lineup" && (
 					<div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
 						{/* Starters List */}
 						<div className="lg:col-span-7 flex flex-col gap-4">
@@ -728,9 +663,6 @@ export function FantasyCommandCenter() {
 									<h3 className="text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
 										Grok Matchup Evaluator
 									</h3>
-									<span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200">
-										CSSP Protocol Active
-									</span>
 								</div>
 
 								{/* Compare Boxes */}
@@ -760,26 +692,6 @@ export function FantasyCommandCenter() {
 									</div>
 								</div>
 
-								{/* Toggle Legacy vs Optimized */}
-								<div className="flex items-center justify-between p-2 rounded-lg bg-neutral-100 dark:bg-neutral-800 mb-3 text-xs">
-									<span className="text-neutral-700 dark:text-neutral-300">
-										Simulate Legacy Verbose Dump:
-									</span>
-									<button
-										onClick={() => setUseLegacySimulation(!useLegacySimulation)}
-										className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-											useLegacySimulation
-												? "bg-rose-600 text-white"
-												: "bg-neutral-300 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200"
-										}`}
-									>
-										{useLegacySimulation
-											? "ON (verbose dump)"
-											: "OFF (compact CSSP)"}
-									</button>
-								</div>
-
-								{/* Action Buttons */}
 								<div className="flex gap-2">
 									<button
 										onClick={handleRunGrokDecision}
@@ -867,8 +779,6 @@ export function FantasyCommandCenter() {
 										<p className="mt-2 text-[10px] font-mono text-neutral-500 dark:text-neutral-400">
 											xAI usage: {latestDecision.tokensUsed} tokens
 											{latestDecision.cacheHit ? " · cache" : ""}
-											{" · vs "}
-											{latestDecision.legacyTokensEquivalent} legacy
 										</p>
 									</div>
 								)}
@@ -924,212 +834,6 @@ export function FantasyCommandCenter() {
 							</div>
 						</div>
 					</div>
-				)}
-
-				{activeTab === "grok" && (
-					<div className="space-y-4">
-						<div className="flex items-center justify-between">
-							<div>
-								<h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
-									Curated Beat Reporter 20-Handle Allowlist
-								</h2>
-								<p className="text-xs text-neutral-500">
-									{state.intelPacket.beatReports.length > 0
-										? `${state.intelPacket.beatReports.length} cached beat items`
-										: "No live 20-handle ingest. X firehose is not wired yet."}
-								</p>
-							</div>
-							<span className="px-2 py-1 rounded bg-neutral-100 dark:bg-neutral-800 font-mono text-xs text-neutral-600 dark:text-neutral-300">
-								{state.intelPacket.beatReports.length} signals
-							</span>
-						</div>
-
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-							{state.intelPacket.beatReports.length === 0 && (
-								<p className="text-xs text-neutral-500 md:col-span-2">
-									Beat radar is empty until X ingest is wired. Start/sit still uses Sleeper injuries and NWS/ESPN weather in the CSSP packet.
-								</p>
-							)}
-							{state.intelPacket.beatReports.map((report: BeatReporterIntel) => (
-								<div
-									key={report.id}
-									className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900"
-								>
-									<div className="flex items-center justify-between mb-2">
-										<div className="flex items-center gap-2">
-											<span className="font-semibold text-xs text-neutral-900 dark:text-neutral-100">
-												{report.authorName}
-											</span>
-											<span className="font-mono text-xs text-neutral-500">
-												{report.handle}
-											</span>
-										</div>
-										<span className="text-[10px] text-neutral-400">
-											{report.timestamp}
-										</span>
-									</div>
-									<p className="text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed mb-3">
-										{report.claim}
-									</p>
-									<div className="flex items-center justify-between pt-2 border-t border-neutral-100 dark:border-neutral-800 text-[11px]">
-										<span className="font-mono text-neutral-500">
-											Team: <strong>{report.team}</strong>
-										</span>
-										<span className="font-semibold text-emerald-600 dark:text-emerald-400">
-											Confidence: {(report.confidence * 100).toFixed(0)}%
-										</span>
-									</div>
-								</div>
-							))}
-						</div>
-					</div>
-				)}
-
-				{activeTab === "token" && (
-					<div className="space-y-5">
-						<div>
-							<h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
-								Token Efficiency Benchmark & Audit
-							</h2>
-							<p className="text-xs text-neutral-500">
-								Metrics comparing legacy conversational LLM dumps against our CSSP + Durable Object architecture.
-							</p>
-						</div>
-
-						{/* Benchmarks Grid */}
-						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-							{state.tokenMetrics.map((metric: TokenMetrics) => (
-								<div
-									key={metric.queryType}
-									className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900"
-								>
-									<div className="text-xs font-medium text-neutral-500 mb-1">
-										{metric.queryType}
-									</div>
-									<div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-										-{metric.savingsPercent.toFixed(1)}%
-									</div>
-									<div className="mt-2 text-[11px] text-neutral-600 dark:text-neutral-400 space-y-0.5">
-										<div>
-											Legacy:{" "}
-											<span className="font-mono">{metric.legacyTokens} tokens</span>
-										</div>
-										<div>
-											Optimized:{" "}
-											<span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">
-												{metric.optimizedTokens} tokens
-											</span>
-										</div>
-										<div>
-											Latency delta:{" "}
-											<span className="font-mono text-emerald-600">
-												-{metric.latencyReductionMs}ms
-											</span>
-										</div>
-									</div>
-								</div>
-							))}
-						</div>
-
-						{/* Protocol Comparison Card */}
-						<div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50">
-							<h3 className="text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-2">
-								Token Optimization Architecture Contract
-							</h3>
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-								<div className="p-3 rounded bg-red-50/50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
-									<div className="font-bold text-red-700 dark:text-red-400 mb-1">
-										❌ Legacy Chat Anti-Pattern (4,200+ tokens)
-									</div>
-									<pre className="text-[11px] text-neutral-600 dark:text-neutral-400 overflow-x-auto whitespace-pre-wrap">
-{`"Hey, can you look at my 16 players:
-Player 1: Kyren Williams, 15.4 pts, ankle injury,
-played for Rams vs Bills, stats: 18 carries, 89 yards...
-Player 2: Zach Charbonnet, 16.2 pts...
-[14 more players + full schedules + 5 paragraph explanation]"`}
-									</pre>
-								</div>
-
-								<div className="p-3 rounded bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900">
-									<div className="font-bold text-emerald-700 dark:text-emerald-400 mb-1">
-										✓ CSSP Compact Protocol (~380 tokens)
-									</div>
-									<pre className="text-[11px] text-neutral-600 dark:text-neutral-400 overflow-x-auto whitespace-pre-wrap">
-{`WK:14 PPR:0.5 LEAGUE:12
-Q: Kyren vs Charbonnet
-INTEL:
-- INJ: Kyren Q(ankle) Thu-DNP | conf0.7 @RapSheet
-- WX: LAR@BUF wind18 gust28 PASS-FADE
-FRESH:1`}
-									</pre>
-								</div>
-							</div>
-						</div>
-					</div>
-				)}
-
-				{activeTab === "weather" && (
-					<div className="space-y-4">
-						<div className="flex items-center justify-between">
-							<div>
-								<h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
-									Stadium Weather Feeds & Impact Tags
-								</h2>
-								<p className="text-xs text-neutral-500">
-									Only extreme weather conditions qualify for Grok qualitative adjustments.
-								</p>
-							</div>
-						</div>
-
-						<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-							{state.intelPacket.weather.map((w: WeatherIntel) => (
-								<div
-									key={w.game}
-									className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900"
-								>
-									<div className="flex items-center justify-between mb-1">
-										<span className="font-bold text-sm text-neutral-900 dark:text-neutral-100">
-											{w.game}
-										</span>
-										<span
-											className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-												w.weatherTag === "PASS-FADE"
-													? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
-													: w.weatherTag === "K-FADE"
-														? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-														: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-											}`}
-										>
-											{w.weatherTag}
-										</span>
-									</div>
-									<div className="text-xs text-neutral-500 mb-3">
-										{w.location}
-									</div>
-
-									<div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-neutral-100 dark:border-neutral-800">
-										<div>
-											<span className="text-neutral-400">Temp:</span>{" "}
-											<strong>{w.tempF}°F</strong>
-										</div>
-										<div>
-											<span className="text-neutral-400">Precip:</span>{" "}
-											<strong>{w.precipPct}%</strong>
-										</div>
-										<div>
-											<span className="text-neutral-400">Wind:</span>{" "}
-											<strong>{w.windMph} mph</strong>
-										</div>
-										<div>
-											<span className="text-neutral-400">Gusts:</span>{" "}
-											<strong>{w.gustMph} mph</strong>
-										</div>
-									</div>
-								</div>
-							))}
-						</div>
-					</div>
-				)}
 			</div>
 		</div>
 	);

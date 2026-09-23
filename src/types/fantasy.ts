@@ -113,14 +113,6 @@ export interface IntelCachePacket {
 	beatReports: BeatReporterIntel[];
 }
 
-export interface TokenMetrics {
-	queryType: string;
-	legacyTokens: number;
-	optimizedTokens: number;
-	savingsPercent: number;
-	latencyReductionMs: number;
-}
-
 export interface SleeperLeagueOption {
 	leagueId: string;
 	name: string;
@@ -165,7 +157,6 @@ export interface CommandCenterState {
 	activeRoster: LeagueRoster;
 	intelPacket: IntelCachePacket;
 	recommendations: GrokRecommendation[];
-	tokenMetrics: TokenMetrics[];
 	lastDecision: GrokDecisionResponse | null;
 	liveAlerts: {
 		id: string;
