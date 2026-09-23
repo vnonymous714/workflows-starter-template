@@ -375,13 +375,6 @@ export function buildCommandCenterState(): CommandCenterState {
 				message: "Highmark Stadium wind sustained at 18mph with 28mph gusts. Kicking and deep passing downgraded.",
 				severity: "warning",
 			},
-			{
-				id: "alt_3",
-				time: "08:30 AM",
-				type: "GROK",
-				message: "20-Handle Beat Intelligence Synced: All 12 rostered player injury updates verified fresh.",
-				severity: "success",
-			},
 		],
 	};
 }

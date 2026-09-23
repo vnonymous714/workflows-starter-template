@@ -104,14 +104,6 @@ export function FantasyCommandCenter() {
 					"Highmark Stadium wind sustained at 18mph with 28mph gusts. Kicking and deep passing downgraded.",
 				severity: "warning",
 			},
-			{
-				id: "alt_3",
-				time: "08:30 AM",
-				type: "GROK",
-				message:
-					"20-Handle Beat Intelligence Synced: All 12 rostered player injury updates verified fresh.",
-				severity: "success",
-			},
 		],
 	});
 
@@ -372,6 +364,7 @@ export function FantasyCommandCenter() {
 
 				{/* Right controls */}
 				<div className="flex items-center gap-2">
+					{isSleeperRoster && (
 					<button
 						onClick={handleRefreshIntel}
 						disabled={isRefreshing}
@@ -390,12 +383,9 @@ export function FantasyCommandCenter() {
 								d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
 							/>
 						</svg>
-						{isRefreshing
-							? "Syncing…"
-							: isSleeperRoster
-								? "Re-sync Sleeper"
-								: "Sync 20-Handle Intel"}
+						{isRefreshing ? "Syncing…" : "Re-sync Sleeper"}
 					</button>
+					)}
 
 					{debug && (
 					<a
