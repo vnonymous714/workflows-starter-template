@@ -224,7 +224,7 @@ describe("ESPN leftover identity and HTTP contracts", () => {
 			env.WORKFLOW_STATUS.idFromName(`espn-resync-${crypto.randomUUID()}`),
 		);
 
-		const first = await runInDurableObject(
+		const afterFirst = await runInDurableObject(
 			stub,
 			async (instance: WorkflowStatusDO) =>
 				instance.syncEspnRoster(
@@ -232,7 +232,12 @@ describe("ESPN leftover identity and HTTP contracts", () => {
 					espnFetch(league()),
 				),
 		);
-		const second = await runInDurableObject(
+		const espnAlertsAfterFirst = afterFirst.liveAlerts.filter(
+			(a) => a.type === "ESPN",
+		).length;
+		expect(espnAlertsAfterFirst).toBe(1);
+
+		const afterSecond = await runInDurableObject(
 			stub,
 			async (instance: WorkflowStatusDO) =>
 				instance.syncEspnRoster(
@@ -242,46 +247,40 @@ describe("ESPN leftover identity and HTTP contracts", () => {
 		);
 
 		expect(
-			second.tokenMetrics.filter(
+			afterSecond.tokenMetrics.filter(
 				(m) =>
 					m.queryType.includes("ESPN") || m.queryType.includes("Roster"),
 			),
 		).toHaveLength(1);
-		expect(second.liveAlerts.filter((a) => a.type === "ESPN")).toHaveLength(2);
-		expect(first.liveAlerts.filter((a) => a.type === "ESPN")).toHaveLength(1);
+		expect(afterSecond.liveAlerts.filter((a) => a.type === "ESPN")).toHaveLength(
+			espnAlertsAfterFirst + 1,
+		);
 	});
 
 	it("maps a thrown ESPN fetch on the HTTP sync path to 502 without a status", async () => {
 		const stub = env.WORKFLOW_STATUS.get(
 			env.WORKFLOW_STATUS.idFromName(`espn-throw-${crypto.randomUUID()}`),
 		);
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = (async () => {
+			throw new Error("dns failed");
+		}) as typeof fetch;
 
-		const response = await runInDurableObject(
-			stub,
-			async (instance: WorkflowStatusDO) => {
-				const originalFetch = globalThis.fetch;
-				globalThis.fetch = (async () => {
-					throw new Error("dns failed");
-				}) as typeof fetch;
-				try {
-					return instance.fetch(
-						new Request("https://do/espn/sync", {
-							method: "POST",
-							headers: { "Content-Type": "application/json" },
-							body: JSON.stringify({ leagueId: "12345678" }),
-						}),
-					);
-				} finally {
-					globalThis.fetch = originalFetch;
-				}
-			},
-		);
+		try {
+			const response = await stub.fetch("https://do/espn/sync", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ leagueId: "12345678" }),
+			});
 
-		expect(response.status).toBe(502);
-		await expect(response.json()).resolves.toMatchObject({
-			code: "ESPN_REQUEST_FAILED",
-			error: expect.stringContaining("dns failed"),
-		});
+			expect(response.status).toBe(502);
+			await expect(response.json()).resolves.toMatchObject({
+				code: "ESPN_REQUEST_FAILED",
+				error: expect.stringContaining("dns failed"),
+			});
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
 	});
 });
 
