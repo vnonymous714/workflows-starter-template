@@ -133,7 +133,25 @@ function mockSleeperFetch(): typeof fetch {
 				display_name: "Gridiron GM",
 			});
 		}
-		if (url === `${SLEEPER_API_BASE}/user/user_gridiron/leagues/nfl/2026`) {
+		if (url === `${SLEEPER_API_BASE}/user/copilot`) {
+			return jsonResponse({
+				user_id: "user_copilot",
+				username: "copilot",
+				display_name: "Co Pilot",
+			});
+		}
+		if (url === `${SLEEPER_API_BASE}/user/spectator`) {
+			return jsonResponse({
+				user_id: "user_spectator",
+				username: "spectator",
+				display_name: "League Spectator",
+			});
+		}
+		if (
+			url === `${SLEEPER_API_BASE}/user/user_gridiron/leagues/nfl/2026` ||
+			url === `${SLEEPER_API_BASE}/user/user_copilot/leagues/nfl/2026` ||
+			url === `${SLEEPER_API_BASE}/user/user_spectator/leagues/nfl/2026`
+		) {
 			return jsonResponse([
 				{
 					league_id: "lg_pulse",
@@ -192,6 +210,7 @@ function mockSleeperFetch(): typeof fetch {
 				{
 					roster_id: 2,
 					owner_id: "someone_else",
+					co_owners: ["user_copilot"],
 					players: ["4046"],
 					starters: ["4046"],
 					settings: { wins: 0, losses: 1, fpts: 90 },
@@ -204,6 +223,15 @@ function mockSleeperFetch(): typeof fetch {
 					user_id: "user_gridiron",
 					display_name: "Gridiron GM",
 					metadata: { team_name: "Live Pulse" },
+				},
+				{
+					user_id: "someone_else",
+					display_name: "Other Manager",
+					metadata: { team_name: "Rival Squad" },
+				},
+				{
+					user_id: "user_copilot",
+					display_name: "Co Pilot",
 				},
 			]);
 		}
@@ -310,6 +338,7 @@ describe("importSleeperRoster", () => {
 		expect(result.roster.record).toBe("1-0");
 		expect(result.roster.rank).toBe(1);
 		expect(result.roster.source?.provider).toBe("sleeper");
+		expect(result.roster.source?.rosterId).toBe(7);
 		expect(result.roster.source?.leagueName).toBe("Sunday Night Circuit");
 		expect(result.roster.teamName).not.toBe("Neural Gridiron Pulse");
 		expect(result.roster.starters.map((player) => player.name)).toContain(
@@ -336,6 +365,26 @@ describe("importSleeperRoster", () => {
 		const matchup = pickDefaultMatchup(result.roster);
 		expect(matchup.starterId).toBe("6794");
 		expect(matchup.benchId).toBe("8154");
+	});
+
+	it("imports the roster when the user is listed as a co-owner", async () => {
+		const result = await importSleeperRoster(
+			{ username: "copilot" },
+			mockSleeperFetch(),
+		);
+
+		expect(result.roster.source?.rosterId).toBe(2);
+		expect(result.roster.teamName).toBe("Rival Squad");
+		expect(result.roster.starters.map((player) => player.id)).toEqual(["4046"]);
+	});
+
+	it("returns not-found when no roster is owned or co-owned by the user", async () => {
+		await expect(
+			importSleeperRoster({ username: "spectator" }, mockSleeperFetch()),
+		).rejects.toMatchObject({
+			code: "SLEEPER_ROSTER_NOT_FOUND",
+			status: 404,
+		});
 	});
 });
 
