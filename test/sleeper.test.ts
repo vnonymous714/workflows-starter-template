@@ -386,6 +386,38 @@ describe("importSleeperRoster", () => {
 			status: 404,
 		});
 	});
+
+	it("honors an owned rosterId", async () => {
+		const result = await importSleeperRoster(
+			{ username: "gridiron", rosterId: 7 },
+			mockSleeperFetch(),
+		);
+
+		expect(result.roster.source?.rosterId).toBe(7);
+		expect(result.roster.teamName).toBe("Live Pulse");
+	});
+
+	it("honors a co-owned rosterId", async () => {
+		const result = await importSleeperRoster(
+			{ username: "copilot", rosterId: 2 },
+			mockSleeperFetch(),
+		);
+
+		expect(result.roster.source?.rosterId).toBe(2);
+		expect(result.roster.teamName).toBe("Rival Squad");
+	});
+
+	it("rejects someone else's rosterId", async () => {
+		await expect(
+			importSleeperRoster(
+				{ username: "gridiron", rosterId: 2 },
+				mockSleeperFetch(),
+			),
+		).rejects.toMatchObject({
+			code: "SLEEPER_ROSTER_NOT_FOUND",
+			status: 404,
+		});
+	});
 });
 
 describe("WorkflowStatusDO Sleeper import", () => {

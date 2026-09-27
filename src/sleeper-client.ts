@@ -266,13 +266,12 @@ function pickRoster(
 	userId: string,
 	rosterId?: number,
 ): SleeperRoster | undefined {
+	const owned = (item: SleeperRoster) =>
+		item.owner_id === userId || (item.co_owners ?? []).includes(userId);
 	if (typeof rosterId === "number") {
-		return rosters.find((item) => item.roster_id === rosterId);
+		return rosters.find((item) => item.roster_id === rosterId && owned(item));
 	}
-	return rosters.find(
-		(item) =>
-			item.owner_id === userId || (item.co_owners ?? []).includes(userId),
-	);
+	return rosters.find(owned);
 }
 
 function mapLeagueRoster(args: {
