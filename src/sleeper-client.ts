@@ -69,6 +69,7 @@ interface SleeperLeague {
 interface SleeperRoster {
 	roster_id: number;
 	owner_id?: string | null;
+	co_owners?: string[] | null;
 	players?: string[] | null;
 	starters?: string[] | null;
 	reserve?: string[] | null;
@@ -265,13 +266,12 @@ function pickRoster(
 	userId: string,
 	rosterId?: number,
 ): SleeperRoster | undefined {
+	const owned = (item: SleeperRoster) =>
+		item.owner_id === userId || (item.co_owners ?? []).includes(userId);
 	if (typeof rosterId === "number") {
-		return rosters.find((item) => item.roster_id === rosterId);
+		return rosters.find((item) => item.roster_id === rosterId && owned(item));
 	}
-	return (
-		rosters.find((item) => item.owner_id === userId) ??
-		rosters.find((item) => (item.players ?? []).length > 0)
-	);
+	return rosters.find(owned);
 }
 
 function mapLeagueRoster(args: {
