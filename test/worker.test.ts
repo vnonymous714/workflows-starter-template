@@ -127,12 +127,10 @@ describe("Worker API", () => {
 		});
 	});
 
-	it("requires an instanceId and websocket upgrade for /ws", async () => {
+	it("requires a websocket upgrade for /ws and falls back without instanceId", async () => {
 		const missingId = await fetchWorker("/ws");
-		expect(missingId.status).toBe(400);
-		expect(await missingId.text()).toBe(
-			"instanceId query parameter required",
-		);
+		expect(missingId.status).toBe(426);
+		expect(await missingId.text()).toBe("Expected Upgrade: websocket");
 
 		const noUpgrade = await fetchWorker("/ws?instanceId=demo");
 		expect(noUpgrade.status).toBe(426);
@@ -154,7 +152,7 @@ describe("Worker API", () => {
 	it("returns 404 for unknown routes and disallowed methods", async () => {
 		const unknown = await fetchWorker("/api/unknown");
 		expect(unknown.status).toBe(404);
-		await expect(unknown.json()).resolves.toEqual({ error: "Not Found" });
+		expect(await unknown.text()).toBe("Not found");
 
 		const getStart = await fetchWorker("/api/workflow/start");
 		expect(getStart.status).toBe(404);

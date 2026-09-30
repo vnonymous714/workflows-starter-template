@@ -55,12 +55,23 @@ async function readState(
 }
 
 describe("WorkflowStatusDO", () => {
-	it("rejects non-websocket requests", async () => {
+	it("returns fantasy command center state on GET /state", async () => {
 		const stub = stubFor(`http-${crypto.randomUUID()}`);
 		const response = await stub.fetch("https://example.com/state");
 
+		expect(response.status).toBe(200);
+		const body = (await response.json()) as {
+			activeRoster: { teamName: string };
+		};
+		expect(body.activeRoster.teamName).toBe("Neural Gridiron Pulse");
+	});
+
+	it("rejects unknown HTTP paths", async () => {
+		const stub = stubFor(`unknown-${crypto.randomUUID()}`);
+		const response = await stub.fetch("https://example.com/nope");
+
 		expect(response.status).toBe(400);
-		expect(await response.text()).toBe("Expected WebSocket");
+		expect(await response.text()).toBe("Expected WebSocket or API route");
 	});
 
 	it("sends pending step state on websocket connect", async () => {
@@ -149,17 +160,22 @@ describe("WorkflowStatusDO", () => {
 			throw new Error("Expected WebSocket response");
 		}
 
-		const messages: WorkflowUpdateMessage[] = [];
-		const gotSecond = new Promise<void>((resolve, reject) => {
+		const messages: Array<WorkflowUpdateMessage & { type: string }> = [];
+		const gotEcho = new Promise<void>((resolve, reject) => {
 			const timer = setTimeout(
 				() => reject(new Error("Timed out waiting for echo")),
 				3000,
 			);
 			socket.addEventListener("message", (event) => {
 				messages.push(
-					JSON.parse(event.data as string) as WorkflowUpdateMessage,
+					JSON.parse(event.data as string) as WorkflowUpdateMessage & {
+						type: string;
+					},
 				);
-				if (messages.length >= 2) {
+				const workflowUpdates = messages.filter(
+					(m) => m.type === "workflow_update",
+				);
+				if (workflowUpdates.length >= 2) {
 					clearTimeout(timer);
 					resolve();
 				}
@@ -168,12 +184,14 @@ describe("WorkflowStatusDO", () => {
 
 		socket.accept();
 		socket.send("ping");
-		await gotSecond;
+		await gotEcho;
 		socket.close(1000, "done");
 
-		expect(messages).toHaveLength(2);
-		expect(messages[0]?.currentStep).toBe("final");
-		expect(messages[1]?.currentStep).toBe("final");
-		expect(messages[1]?.stepStatuses.final).toBe("running");
+		const workflowUpdates = messages.filter(
+			(m) => m.type === "workflow_update",
+		);
+		expect(workflowUpdates[0]?.currentStep).toBe("final");
+		expect(workflowUpdates[1]?.currentStep).toBe("final");
+		expect(workflowUpdates[1]?.stepStatuses.final).toBe("running");
 	});
 });
