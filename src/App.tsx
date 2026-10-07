@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { WorkflowDiagram } from "./components/WorkflowDiagram";
 import { CodeDisplay } from "./components/CodeDisplay";
 import { BackgroundDots } from "./components/BackgroundDots";
@@ -52,6 +53,7 @@ function App() {
 
 	return (
 		<div className="min-h-screen bg-neutral-50/30 dark:bg-neutral-950 flex flex-col relative text-neutral-900 dark:text-neutral-100">
+			<SpeedInsights />
 			{/* Background dots across entire page */}
 			<div className="absolute inset-0 text-neutral-200/50 dark:text-neutral-700/40 overflow-hidden pointer-events-none">
 				<BackgroundDots />
